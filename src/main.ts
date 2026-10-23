@@ -105,7 +105,7 @@ addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()))
 
 // See if you are pressing E
 addEventListener('keydown', (e) => {
-    if (e.key.toLowerCase() ! == 'e' || e.repeat) return
+    if (e.key.toLowerCase() !== 'e' || e.repeat) return
     if (talkingTo == null) {
         talkingTo = nearbyNpc() ?? null
         lineIndex = 0
