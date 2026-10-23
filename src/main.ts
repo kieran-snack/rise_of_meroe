@@ -8,12 +8,14 @@
  ******************************************************************************/
 
 
-// Defines canvas and context 
+// All the tile and character drawing lives in art.ts
+// (TILE, the size of one square in pixels, is defined there)
+import { TILE, drawPerson, drawTileArt, skinFor } from './art.ts'
+import type { Facing } from './art.ts'
+
+// Defines canvas and context
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas1")!
 const ctx = canvas.getContext('2d')!
-
-// Making the tile (the map, per say)
-const TILE = 32
 
 // Defining the map in ASCII characters
 const rows = [
@@ -90,7 +92,7 @@ function nearbyNpc(): Npc | undefined {
 
 
 // Defining player + adding characteristics
-const player = { x: 100, y: 100, size: 20, speed: 2 }
+const player = { x: 100, y: 100, size: 20, speed: 2, facing: 'down' as Facing, moving: false }
 
 // Remember who you are talking to
 let talkingTo: Npc | null = null
@@ -105,7 +107,7 @@ addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()))
 
 // See if you are pressing E
 addEventListener('keydown', (e) => {
-    if (e.key.toLowerCase() ! == 'e' || e.repeat) return
+    if (e.key.toLowerCase() !== 'e' || e.repeat) return
     if (talkingTo == null) {
         talkingTo = nearbyNpc() ?? null
         lineIndex = 0
@@ -121,7 +123,10 @@ function update() {
     let dy = 0
 
     // You can't walk while you're talking
-    if (talkingTo !== null) return
+    if (talkingTo !== null) {
+        player.moving = false
+        return
+    }
 
     // Diagonal x & y
     if (keys.has('a') || keys.has('arrowleft')) dx -= 1
@@ -134,6 +139,13 @@ function update() {
         dx *= Math.SQRT1_2
         dy *= Math.SQRT1_2
     }
+
+    // Remember which way we face and whether we're walking (for the art)
+    player.moving = dx !== 0 || dy !== 0
+    if (dx < 0) player.facing = 'left'
+    else if (dx > 0) player.facing = 'right'
+    else if (dy < 0) player.facing = 'up'
+    else if (dy > 0) player.facing = 'down'
 
     // Run our collision-detecting functions and store the output
     // in variables
@@ -148,44 +160,48 @@ function update() {
     player.y = Math.max(0, Math.min(canvas.height - player.size, player.y))
 }
 
-// Drawing tile, parsing rows[] up above
-function drawTile(char: string, x: number, y: number) {
-    switch (char) {
-        case '~':
-            ctx.fillStyle = '#329def'
-            break
-        case 'H':
-            ctx.fillStyle = "#c87741"
-            break
-        case 'T':
-            ctx.fillStyle = "#156c08"
-            break
-        case 'P':
-            ctx.fillStyle = '#bcb903'
-            break
-        default:
-            ctx.fillStyle = '#f6d997'
-    }
-    ctx.fillRect(x, y, TILE, TILE)
-}
-
 // Drawing the canvas
 function draw() {
+    const time = performance.now()
+
+    // Draws the map (the art for each tile is in art.ts)
     for (let row = 0; row < rows.length; row++) {
         for (let col = 0; col < rows[row].length; col++) {
-            drawTile(rows[row][col], col * TILE, row * TILE)
+            const neighbors = {
+                up: rows[row - 1]?.[col] ?? ' ',
+                down: rows[row + 1]?.[col] ?? ' ',
+                left: rows[row][col - 1] ?? ' ',
+                right: rows[row][col + 1] ?? ' ',
+            }
+            drawTileArt(ctx, rows[row][col], col * TILE, row * TILE, col, row, time, neighbors)
         }
     }
 
-    // Draws the villagers
+    // Draws the villagers (each one keeps its own color for its clothes)
     for (const npc of npcs) {
-        ctx.fillStyle = npc.color
-        ctx.fillRect(npc.col * TILE + 6, npc.row * TILE + 6, 20, 20)
+        drawPerson(
+            ctx,
+            npc.col * TILE + 6,
+            npc.row * TILE + 6,
+            20,
+            { skin: skinFor(npc.name), cloth: npc.color, accent: '#d4a82a' },
+            'down',
+            false,
+            time,
+        )
     }
 
-    // Draws the player
-    ctx.fillStyle = '#7a4a2a'
-    ctx.fillRect(player.x, player.y, player.size, player.size)
+    // Draws the player: white linen kilt with a gold headband
+    drawPerson(
+        ctx,
+        player.x,
+        player.y,
+        player.size,
+        { skin: '#7a4a2e', cloth: '#f3ead6', accent: '#d4a82a' },
+        player.facing,
+        player.moving,
+        time,
+    )
 
     if (talkingTo !== null) {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
