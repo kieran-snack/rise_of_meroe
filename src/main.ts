@@ -10,8 +10,8 @@
 
 // All the tile and character drawing lives in art.ts
 // (TILE, the size of one square in pixels, is defined there)
-import { TILE, drawPerson, drawTileArt, skinFor } from './art.ts'
 import type { Facing } from './art.ts'
+import { TILE, drawPerson, drawTileArt, skinFor } from './art.ts'
 
 // Defines canvas and context
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas1")!
@@ -19,21 +19,26 @@ const ctx = canvas.getContext('2d')!
 
 // Defining the map in ASCII characters
 const rows = [
-  '~~..................',
-  '~~..........HH......',
-  '~~..........HH...T..',
-  '~~..................',
-  '~~...T..............',
-  '~~..................',
-  '~~.............PP...',
-  '~~.....T.......PP...',
-  '~~..................',
-  '~~..........HH......',
-  '~~..........HH...T..',
-  '~~..................',
-  '~~...T..............',
-  '~~..................',
-  '~~..........HH...PP.',
+  '~~............................',
+  '~~..........HH.........T......',
+  '~~..........HH...T............',
+  '~~..........................T.',
+  '~~...T................HH......',
+  '~~....................HH......',
+  '~~.............PP...........T.',
+  '~~.....T.......PP.............',
+  '~~............................',
+  '~~..........HH................',
+  '~~..........HH...T............',
+  '~~............................',
+  '~~...T........................',
+  '~~............................',
+  '~~..........HH...PP...........',
+  '~~............................',
+  '~~.......T.............PP.....',
+  '~~.....................PP.....',
+  '~~....HH..........T...........',
+  '~~....HH......................',
 ]
 
 // Making our villager interface
@@ -48,7 +53,7 @@ interface Npc {
 // Making list of villagers
 const npcs: Npc[] = [
     { name:  "Amadi", col: 5, row: 3, color: '#8e3b8e', lines: ['hey bro'] },
-    { name: "Mustafa", col: 8, row: 5, color: '#00ff84', lines: ['i gotta quest for u bro']},
+    { name: "Mustafa", col: 8, row: 5, color: '#00ff84', lines: ['i gotta quest for u bro jk']},
     { name: "Fatima", col: 2, row: 4, color: '#9b2525', lines: ['yo yo yo']}
 ]
 

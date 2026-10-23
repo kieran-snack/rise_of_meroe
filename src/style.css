@@ -1,0 +1,14 @@
+body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #2b1d0e;
+}
+
+canvas {
+    width: min(95vw, 142.5vh);   /* 3:2 shape that fits the window */
+    aspect-ratio: 3 / 2;
+    border: 4px solid #c9a227;
+}
