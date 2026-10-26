@@ -1,7 +1,7 @@
 /******************************************************************************
  * File:        main.ts
  * Author:      Kieran Provost
- * Date:        10-22-26 (Last edit)
+ * Date:        10-26-26 (Last edit)
  * Description: The backend and rendering for the Rise of Meroe.
  * 
  * License:     MIT
@@ -10,8 +10,16 @@
 
 // All the tile and character drawing lives in art.ts
 // (TILE, the size of one square in pixels, is defined there)
-import type { Facing } from './art.ts'
-import { TILE, drawPerson, drawTileArt, skinFor } from './art.ts'
+import type { Facing, Hair, Outfit } from './art.ts'
+import { TILE, drawDialogue, drawPerson, drawQuestPanel, drawTileArt, skinFor } from './art.ts'
+// Importing our quests
+import { quests } from './quests.ts'
+
+// Fonts for the dialogue box (bundled with the game, so no internet needed)
+import '@fontsource/cinzel/latin-700.css'
+import '@fontsource/cormorant-garamond/latin-600.css'
+document.fonts.load("700 16px Cinzel")
+document.fonts.load("600 22px 'Cormorant Garamond'")
 
 // Defines canvas and context
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas1")!
@@ -47,14 +55,48 @@ interface Npc {
     col: number
     row: number
     color: string
-    lines: string[]
+    outfit: Outfit   // 'kilt' | 'robe' | 'dress'
+    hair: Hair       // 'short' | 'braids' | 'bald' | 'headwrap'
+    lines: string[]  // what they say when they have no quest for you
 }
 
 // Making list of villagers
 const npcs: Npc[] = [
-    { name:  "Amadi", col: 5, row: 3, color: '#8e3b8e', lines: ['hey bro'] },
-    { name: "Mustafa", col: 8, row: 5, color: '#00ff84', lines: ['i gotta quest for u bro jk']},
-    { name: "Fatima", col: 2, row: 4, color: '#9b2525', lines: ['yo yo yo']}
+    {
+        name: "Amadi", col: 5, row: 3, color: '#8e3b8e', outfit: 'kilt', hair: 'short',
+        lines: [
+            "Good day, traveler! I am a farmer, and I grow grain by the Nile.",
+            "When the river floods, it leaves rich dark soil behind. That is why our barley and sorghum grow so well.",
+        ],
+    },
+    {
+        name: "Mustafa", col: 8, row: 5, color: '#00ff84', outfit: 'kilt', hair: 'bald',
+        lines: [
+            "The fire in my forge never goes cold.",
+            "Iron makes our tools and our spears strong. Meroë is famous for its ironworking!",
+        ],
+    },
+    {
+        name: "Fatima", col: 2, row: 4, color: '#9b2525', outfit: 'dress', hair: 'braids',
+        lines: [
+            "I am a trader. I carry goods up and down the Nile.",
+            "Kush sends gold, ivory and ebony to faraway lands, and brings back fine goods in return.",
+        ],
+    },
+    {
+        name: "Mahmoud", col: 4, row: 7, color: '#1c060a', outfit: 'robe', hair: 'short',
+        lines: [
+            "Welcome to Meroë, traveler! For hundreds of years this city was the capital of the Kingdom of Kush.",
+            "Look at the pyramids, where our kings and queens rest. They are much steeper than the pyramids of Egypt.",
+        ],
+    },
+    {
+        name: "Kasha", col: 7, row: 1, color: '#5f12ff', outfit: 'dress', hair: 'headwrap',
+        lines: [
+            "I am a scribe. I write in the Meroitic script, the alphabet of our people.",
+            "Scholars today can read its sounds, but they still do not understand most of our language!",
+        ],
+    },
 ]
 
 // Returns true if a tile (or villager) is solid
@@ -103,6 +145,54 @@ const player = { x: 100, y: 100, size: 20, speed: 2, facing: 'down' as Facing, m
 let talkingTo: Npc | null = null
 let lineIndex = 0
 
+type QuestState = 'new' | 'active' | 'done'
+const questState = new Map<string, QuestState>() // quest id goes into the state
+let currentLines: string[] = []
+
+function stateOf(id: string): QuestState {
+    return questState.get(id) ?? 'new'
+}
+
+// What should the villager say right now?
+function linesFor(npc: Npc): string[] {
+    for (const q of quests) {
+        if (stateOf(q.id) === 'new' && q.giver == npc.name) return q.offer
+        if (stateOf(q.id) === 'active' && q.target == npc.name) return q.thanks
+    }
+    return npc.lines // if not in a quest just small talk
+}
+
+// Called when the last line of a conversation is dismissed
+function finishTalking(npc: Npc) {
+    for (const q of quests) {
+        if (stateOf(q.id) === 'new' && q.giver === npc.name) {
+            questState.set(q.id, 'active') // accepted
+            break
+        }
+        if (stateOf(q.id) === 'active' && q.target === npc.name) {
+            questState.set(q.id, 'done') // completed
+            // reuse the dialogue box to show the fact
+            talkingTo = { name: 'Did you know?', col: -1, row: -1, color: '#d4a82a', outfit: 'kilt', hair: 'short', lines: [] }
+            currentLines = [q.fact]
+            lineIndex = 0
+            lineStartedAt = performance.now() // the fact types out like any other line
+            return
+        }
+    }
+    talkingTo = null
+}
+
+// Dialogue box animation (times come from performance.now(), in milliseconds)
+const OPEN_MS = 300         // how long the box takes to slide in
+const TYPE_MS = 28          // time per letter in the typewriter effect
+let dialogueOpenedAt = 0
+let lineStartedAt = 0
+
+// How many letters of the current line are showing right now
+function charsShown(): number {
+    return Math.max(0, Math.floor((performance.now() - lineStartedAt) / TYPE_MS))
+}
+
 // Assigning the keys
 const keys = new Set<string>()
 
@@ -113,14 +203,21 @@ addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()))
 // See if you are pressing E
 addEventListener('keydown', (e) => {
     if (e.key.toLowerCase() !== 'e' || e.repeat) return
-    if (talkingTo == null) {
+    if (talkingTo === null) {
         talkingTo = nearbyNpc() ?? null
+        if (talkingTo !== null) currentLines = linesFor(talkingTo)
         lineIndex = 0
+        dialogueOpenedAt = performance.now()
+        lineStartedAt = dialogueOpenedAt + OPEN_MS   // start typing once the box is in
+    } else if (charsShown() < currentLines[lineIndex].length) {
+        lineStartedAt = 0                            // still typing: show the whole line now
     } else {
         lineIndex++
-        if (lineIndex >= talkingTo.lines.length) talkingTo = null
+        lineStartedAt = performance.now()
+        if (lineIndex >= currentLines.length) finishTalking(talkingTo)
     }
 })
+
 // Function to update the key listeners, fix diagonal speed, and clamping the player's
 // boundaries
 function update() {
@@ -189,7 +286,7 @@ function draw() {
             npc.col * TILE + 6,
             npc.row * TILE + 6,
             20,
-            { skin: skinFor(npc.name), cloth: npc.color, accent: '#d4a82a' },
+            { skin: skinFor(npc.name), cloth: npc.color, accent: '#d4a82a', outfit: npc.outfit, hair: npc.hair },
             'down',
             false,
             time,
@@ -202,22 +299,30 @@ function draw() {
         player.x,
         player.y,
         player.size,
-        { skin: '#7a4a2e', cloth: '#f3ead6', accent: '#d4a82a' },
+        { skin: '#7a4a2e', cloth: '#f3ead6', accent: '#d4a82a', outfit: 'kilt', hair: 'short' },
         player.facing,
         player.moving,
         time,
     )
 
-    if (talkingTo !== null) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
-        ctx.fillRect(20, canvas.height - 100, canvas.width - 40, 80)
-        ctx.fillStyle = '#977a1b'
-        ctx.font = 'bold 18px sans-serif'
-        ctx.fillText(talkingTo.name, 36, canvas.height - 72)
-        ctx.fillStyle = 'white'
-        ctx.font = '16px sans-serif'
-        ctx.fillText(talkingTo.lines[lineIndex], 36, canvas.height - 44)
+    // Quest box (top-left): the first quest that's active
+    const active = quests.find(q => stateOf(q.id) === 'active')
+    const done = quests.filter(q => stateOf(q.id) === 'done').length
+    // (the styling is in art.ts)
+    drawQuestPanel(
+        ctx,
+        done,
+        quests.length,
+        active ? active.title : null,
+        active ? active.goal : done === quests.length ? 'All quests complete!' : 'Talk to a villager.',
+    )
 
+    // Dialogue box
+    if (talkingTo !== null) {
+        // The animated box (slide-in, typewriter text) is drawn in art.ts
+        const open = Math.min(1, (time - dialogueOpenedAt) / OPEN_MS)
+        drawDialogue(ctx, canvas.width, canvas.height, talkingTo.name,
+            currentLines[lineIndex], open, charsShown(), time)
     }
 }
 
