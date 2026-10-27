@@ -10,13 +10,16 @@
 
 // All the tile and character drawing lives in art.ts
 // (TILE, the size of one square in pixels, is defined there)
-import type { DesignerRow, Facing, Hair, MapMarker, Outfit } from './art.ts'
+import type { CodexEntry, DesignerRow, Facing, Hair, MapMarker, Outfit } from './art.ts'
 import {
     CLOTH_COLORS, HAIRS, OUTFITS, PLAYER_SKINS, TILE,
-    drawDesigner, drawDialogue, drawInventory, drawItem, drawMarker, drawNameTag,
-    drawPerson, drawQuestMap, drawQuestPanel, drawTileArt, drawTitleScreen, skinFor,
+    drawChest, drawCodex, drawDesigner, drawDialogue, drawInventory, drawItem, drawMarker, drawNameTag,
+    drawPerson, drawQuestMap, drawQuestPanel, drawRegionBanner, drawTileArt, drawTitleScreen, skinFor,
 } from './art.ts'
 // Importing our items and quests
+import type { ChestDef } from './chests.ts'
+import { chestDefs } from './chests.ts'
+import { civs } from './civs.ts'
 import type { ItemDef } from './items.ts'
 import { itemDefs } from './items.ts'
 import type { Quest } from './quests.ts'
@@ -25,6 +28,8 @@ import { quests } from './quests.ts'
 // Fonts for the dialogue box (bundled with the game, so no internet needed)
 import '@fontsource/cinzel/latin-700.css'
 import '@fontsource/cormorant-garamond/latin-600.css'
+// The page styling (no margin, no scrollbars, dark background)
+import './style.css'
 document.fonts.load("700 16px Cinzel")
 document.fonts.load("600 22px 'Cormorant Garamond'")
 
@@ -42,39 +47,98 @@ addEventListener('resize', resize)
 
 // Defining the map in ASCII characters
 const rows = [
-  '~~~.....................................',
-  '~~~.....................................',
-  '~~~.T...................................',
-  '~~~.......HH..................HH...T....',
-  '~~................T...........HH........',
-  '~~......................................',
-  '~~............T..........T..............',
-  '~~.........HH...........................',
-  '~~.T.......HH.......................PP..',
-  '~~....................HH.....T......PP..',
-  '~~......T......T......HH................',
-  '~~...T..................................',
-  '~~......................T........T......',
-  '~~~....T....T...........................',
-  '~~~.T.................................T.',
-  '~~~.........................T...........',
-  '~~~................T....................',
-  '~~......................................',
-  '~~...........T....................PP....',
-  '~~....HH..........................PP....',
-  '~~....HH.......................T........',
-  '~~.T.................T.....T............',
-  '~~..............HH...................PP.',
-  '~~...................................PP.',
-  '~~~..T..................................',
-  '~~~.......................HH.....PP.....',
-  '~~~..............T........HH.....PP.....',
-  '~~.......T............T.......PP........',
-  '~~....................................T.',
-  '~~......................................',
+  '~~...........................................................................~~~',
+  '~~...........................................................................~~~',
+  '~~~..........................................................................~~~',
+  '~~~.T..................T................PP................T..................~~~',
+  '~~~.....T...............................PP..............................T....~~~',
+  '~~.............T...........HH.......................T........................~~~',
+  '~~.........................HH...................................T.........~~~~~~',
+  '~~...T.....................................PP.............................~~~~~~',
+  '~~.........................................PP.............................~~~~~~',
+  '~~........HH.....HH..................................................T....~~~~~~',
+  '~~........HH.....HH...................PP.....................HH..........~~~~~~~',
+  '~~..T............................HH...PP.....................HH..........~~~~~~~',
+  '~~~.....................T........HH.......T..............................~~~~~~~',
+  '~~~......................................................................~~~~~~~',
+  '~~..................................T..................HH................~~~~~~~',
+  '~~....T............HH.........T...................T....HH................~~~~~~~',
+  '~~..........HH.....HH....................................................~~~~~~~',
+  '~~.......................................................................~~~~~~~',
+  '~~................................HH..................................HH.~~~~~~~',
+  '~~..T.....................................................................~~~~~~',
+  '~~~.........T...........................T...............T.................~~~~~~',
+  '~~~.......................................................................~~~~~~',
+  '~~..............T.................T...........................T...........~~~~~~',
+  '~~...T.......................................................................~~~',
+  '~~..................HH......HH..............T................................~~~',
+  '~~..................HH......HH..................T............................~~~',
+  '~~......T.............................T.............................T........~~~',
+  '~~...........................................................................~~~',
+  '~~...........................................................................~~~',
+  '~~...........................................................................~~~',
+  '~~~..........................................................................~~~',
+  '~~~..........................................................................~~~',
+  '~~~.T........................................................................~~~',
+  '~~~.......HH..................HH...T.......................................T.~~~',
+  '~~................T...........HH............T................................~~~',
+  '~~..........................................................T................~~~',
+  '~~............T..........T...................................................~~~',
+  '~~.........HH.........................................HH.....................~~~',
+  '~~.T.......HH.......................PP..........T.....HH.....................~~~',
+  '~~....................HH.....T......PP.......................................~~~',
+  '~~......T......T......HH........................................T.........HH.~~~',
+  '~~...T.......................................................................~~~',
+  '~~......................T........T...........................................~~~',
+  '~~~....T....T.................................................HH.............~~~',
+  '~~~.T.................................T.......................HH.............~~~',
+  '~~~.........................T................................................~~~',
+  '~~~................T................................T.....................S..~~~',
+  '~~...................................................................S.......~~~',
+  '~~...........T....................PP.........................................~~~',
+  '~~....HH..........................PP....................................S....~~~',
+  '~~....HH.......................T..................HH.........................~~~',
+  '~~.T.................T.....T.................................................~~~',
+  '~~..............HH...................PP...............................S.....T~~~',
+  '~~...................................PP......................................~~~',
+  '~~~..T..................................................T....................~~~',
+  '~~~.......................HH.....PP..........................................~~~',
+  '~~~..............T........HH.....PP...........T...................T..........~~~',
+  '~~.......T............T.......PP.............................................~~~',
+  '~~....................................T......................................~~~',
+  '~~...........................................................................~~~',
 ]
 const MAP_W = rows[0].length
 const MAP_H = rows.length
+
+
+// --- Regions ---------------------------------------------------------------
+// Named rectangles of the map (in tiles). A banner shows when you walk into one.
+interface Region {
+    name: string
+    subtitle: string
+    col0: number   // left and right edges (inclusive)
+    col1: number
+    row0: number   // top and bottom edges (inclusive)
+    row1: number
+}
+
+// The first matching region wins, so smaller ones (like the border) go first.
+const regions: Region[] = [
+    { name: 'Syene, the Roman Border', subtitle: 'Egypt ends here, and Rome guards the frontier', col0: 0, col1: 45, row0: 22, row1: 29 },
+    { name: 'Egypt', subtitle: 'North of Kush, the land of the pharaohs', col0: 0, col1: 45, row0: 0, row1: 29 },
+    { name: 'The Red Sea Coast', subtitle: 'Greek and Roman ships trade along these shores', col0: 46, col1: 79, row0: 0, row1: 29 },
+    { name: 'Aksum', subtitle: 'A rising kingdom in the highlands to the southeast', col0: 40, col1: 79, row0: 30, row1: 59 },
+    { name: 'Kush', subtitle: 'Your homeland: Meroë and its villages along the Nile', col0: 0, col1: 39, row0: 30, row1: 59 },
+]
+
+function regionAt(col: number, row: number): Region | undefined {
+    return regions.find(r => col >= r.col0 && col <= r.col1 && row >= r.row0 && row <= r.row1)
+}
+
+let currentRegion = ''                   // name of the region you are standing in
+let bannerRegion: Region | null = null   // the region shown in the banner
+let bannerStartedAt = -99999             // when the banner appeared
 
 
 // Making our villager interface
@@ -91,51 +155,96 @@ interface Npc {
 // Making list of villagers
 const npcs: Npc[] = [
     {
-        name: "Amadi", col: 6, row: 5, color: '#8e3b8e', outfit: 'kilt', hair: 'short',
+        name: "Amadi", col: 6, row: 35, color: '#8e3b8e', outfit: 'kilt', hair: 'short',
         lines: [
             "Good day, traveler! I am a farmer, and I grow grain by the Nile.",
             "When the river floods, it leaves rich dark soil behind. That is why our barley and sorghum grow so well.",
         ],
     },
     {
-        name: "Mustafa", col: 20, row: 11, color: '#00ff84', outfit: 'kilt', hair: 'bald',
+        name: "Mustafa", col: 20, row: 41, color: '#00ff84', outfit: 'kilt', hair: 'bald',
         lines: [
             "The fire in my forge never goes cold.",
             "Iron makes our tools and our spears strong. Meroë is famous for its ironworking!",
         ],
     },
     {
-        name: "Fatima", col: 8, row: 17, color: '#9b2525', outfit: 'dress', hair: 'braids',
+        name: "Fatima", col: 8, row: 47, color: '#9b2525', outfit: 'dress', hair: 'braids',
         lines: [
             "I am a trader. I carry goods up and down the Nile.",
             "Kush sends gold, ivory and ebony to faraway lands, and brings back fine goods in return.",
         ],
     },
     {
-        name: "Mahmoud", col: 30, row: 22, color: '#1c060a', outfit: 'robe', hair: 'short',
+        name: "Mahmoud", col: 30, row: 52, color: '#1c060a', outfit: 'robe', hair: 'short',
         lines: [
             "Welcome to Meroë, traveler! For hundreds of years this city was the capital of the Kingdom of Kush.",
             "Look at the pyramids, where our kings and queens rest. They are much steeper than the pyramids of Egypt.",
         ],
     },
     {
-        name: "Kasha", col: 32, row: 5, color: '#5f12ff', outfit: 'dress', hair: 'headwrap',
+        name: "Kasha", col: 32, row: 35, color: '#5f12ff', outfit: 'dress', hair: 'headwrap',
         lines: [
             "I am a scribe. I write in the Meroitic script, the alphabet of our people.",
             "Scholars today can read its sounds, but they still do not understand most of our language!",
         ],
     },
+    {
+        name: "Hori", col: 14, row: 12, color: '#e8e0c8', outfit: 'robe', hair: 'bald',
+        lines: [
+            "Welcome to Egypt, traveler. I serve in the temple of the god Amun.",
+            "The people of Kush worship Amun too. They built a great temple to him at Jebel Barkal.",
+        ],
+    },
+    {
+        name: "Nebet", col: 30, row: 8, color: '#2f6fb5', outfit: 'dress', hair: 'headwrap',
+        lines: [
+            "Egypt has always wanted what Kush has: gold, ivory and ebony.",
+            "The lands to the south are rich, and we trade for their goods.",
+        ],
+    },
+    {
+        name: "Marcus", col: 24, row: 27, color: '#a02020', outfit: 'robe', hair: 'short',
+        lines: [
+            "I am a soldier of Rome, posted at the border at Syene.",
+            "Rome rules Egypt now. Not long ago, a Kushite queen attacked this town. We have not forgotten.",
+        ],
+    },
+    {
+        name: "Demetrios", col: 66, row: 14, color: '#b8860b', outfit: 'robe', hair: 'short',
+        lines: [
+            "I am a Greek merchant. My ships sail the Red Sea.",
+            "Frankincense, ivory and gold: that is what my buyers want.",
+        ],
+    },
+    {
+        name: "Berhane", col: 58, row: 40, color: '#2e7d32', outfit: 'robe', hair: 'headwrap',
+        lines: [
+            "Welcome to Aksum! Our caravans cross the highlands to the sea.",
+            "Our port, Adulis, trades with Egypt, Arabia and India.",
+        ],
+    },
+    {
+        name: "Dawit", col: 66, row: 52, color: '#8a8f98', outfit: 'kilt', hair: 'bald',
+        lines: [
+            "I carve the tall stone pillars of Aksum, called stelae.",
+            "Some are cut from a single block of granite and are taller than most buildings.",
+        ],
+    },
 ]
 
 // Items still lying on the ground (a copy, so picking one up doesn't change items.ts)
-const worldItems: ItemDef[] = [...itemDefs]
+const worldItems: ItemDef[] = itemDefs.filter(i => i.col >= 0)
+
+// Treasure chests: which ones you have opened so far
+const openedChests = new Set<string>()
 
 // Returns true if a tile (or villager) is solid
 function isSolid(col: number, row: number): boolean {
     const char = rows[row]?.[col]
     return (
     char === undefined ||
-    char === '~' || char === 'H' || char === 'T' || char === 'P' ||
+    char === '~' || char === 'H' || char === 'T' || char === 'P' || char === 'S' ||
     npcs.some(n => n.col === col && n.row === row)
 )
 }
@@ -175,9 +284,18 @@ function nearbyItem(): ItemDef | undefined {
     return worldItems.find(i => Math.hypot(px - (i.col * TILE + TILE / 2), py - (i.row * TILE + TILE / 2)) < 40)
 }
 
+// A closed chest close enough to open
+function nearbyChest(): ChestDef | undefined {
+    const px = player.x + player.size / 2
+    const py = player.y + player.size / 2
+    return chestDefs.find(c =>
+        !openedChests.has(c.id) &&
+        Math.hypot(px - (c.col * TILE + TILE / 2), py - (c.row * TILE + TILE / 2)) < 44)
+}
+
 
 // Defining player + adding characteristics (starts near the middle of the village)
-const player = { x: 13 * TILE + 6, y: 10 * TILE + 6, size: 20, speed: 2, facing: 'down' as Facing, moving: false }
+const player = { x: 13 * TILE + 6, y: 40 * TILE + 6, size: 20, speed: 2, facing: 'down' as Facing, moving: false }
 
 // What the player looks like (changed in the character designer)
 const appearance = {
@@ -194,12 +312,19 @@ type Screen = 'title' | 'designer' | 'playing'
 let screen: Screen = 'title'
 let inventoryOpen = false
 let mapOpen = false
+let codexOpen = false
+let codexIndex = 0   // which civilization is selected in the Codex
 
 // --- Inventory -------------------------------------------------------------
 const inventory: string[] = []   // item ids
 
+// Civilizations you have learned about (their Codex pages are unlocked)
+const discovered = new Set<string>()
+
 function addItem(id: string) {
     inventory.push(id)
+    const civ = itemDefs.find(i => i.id === id)?.civ
+    if (civ) discovered.add(civ)
 }
 
 function hasItem(id: string): boolean {
@@ -226,7 +351,12 @@ function stateOf(id: string): QuestState {
     return questState.get(id) ?? 'new'
 }
 
-/// Which of the items this quest needs are you still missing?
+/// Has the quest this one depends on been finished? (quests without `requires` are always available)
+function isAvailable(q: Quest): boolean {
+    return !q.requires || stateOf(q.requires) === 'done'
+}
+
+// Which of the items this quest needs are you still missing?
 function missingItems(q: Quest): string[] {
     return (q.needs ?? []).filter(id => !hasItem(id))
 }
@@ -234,7 +364,7 @@ function missingItems(q: Quest): string[] {
 // What should the villager say right now?
 function linesFor(npc: Npc): string[] {
     for (const q of quests) {
-        if (stateOf(q.id) === 'new' && q.giver == npc.name) return q.offer
+        if (stateOf(q.id) === 'new' && isAvailable(q) && q.giver == npc.name) return q.offer
         if (stateOf(q.id) === 'active' && q.target == npc.name) {
             if (missingItems(q).length > 0) return q.reminder ?? ['Come back when you have what I asked for.']
             return q.thanks
@@ -246,7 +376,7 @@ function linesFor(npc: Npc): string[] {
 // The gold "!" or "?" above a villager's head (null = nothing to show)
 function markerFor(npc: Npc): string | null {
     for (const q of quests) {
-        if (stateOf(q.id) === 'new' && q.giver === npc.name) return '!'
+        if (stateOf(q.id) === 'new' && isAvailable(q) && q.giver === npc.name) return '!'
         if (stateOf(q.id) === 'active' && q.target === npc.name) {
             return missingItems(q).length === 0 ? '?' : null
         }
@@ -275,10 +405,28 @@ function pickUp(item: ItemDef) {
     startDialogue(speakerNamed(`Found: ${item.name}`), [item.fact])
 }
 
+// Open a chest: its loot goes into your inventory, and each piece teaches you something
+function openChest(chest: ChestDef) {
+    openedChests.add(chest.id)
+    const lines: string[] = []
+    for (const id of chest.loot) {
+        const def = itemDefs.find(i => i.id === id)
+        if (!def) continue
+        const isNew = def.civ !== undefined && !discovered.has(def.civ)
+        addItem(id)
+        lines.push(`${def.name}: ${def.fact}`)
+        if (isNew) {
+            const civ = civs.find(c => c.id === def.civ)
+            if (civ) lines.push(`New Codex entry unlocked: ${civ.name}. Press C to read it.`)
+        }
+    }
+    startDialogue(speakerNamed('Treasure Chest'), lines)
+}
+
 // Called when the last line of a conversation is dismissed
 function finishTalking(npc: Npc) {
     for (const q of quests) {
-        if (stateOf(q.id) === 'new' && q.giver === npc.name) {
+        if (stateOf(q.id) === 'new' && isAvailable(q) && q.giver === npc.name) {
             questState.set(q.id, 'active') // accepted
             break
         }
@@ -315,6 +463,11 @@ function interact() {
         const item = nearbyItem()
         if (item) {
             pickUp(item)
+            return
+        }
+        const chest = nearbyChest()
+        if (chest) {
+            openChest(chest)
             return
         }
         const npc = nearbyNpc()
@@ -388,6 +541,17 @@ function questMarkers(): MapMarker[] {
     return marks
 }
 
+// --- Codex -----------------------------------------------------------------
+function codexEntries(): CodexEntry[] {
+    return civs.map(c => ({
+        name: c.name,
+        years: c.years,
+        relation: c.relation,
+        summary: c.summary,
+        unlocked: discovered.has(c.id),
+    }))
+}
+
 // --- Keys ------------------------------------------------------------------
 
 // --- Character designer ---------------------------------------------------------------------
@@ -431,15 +595,25 @@ addEventListener('keydown', (e) => {
     if (key === 'escape') {
         inventoryOpen = false
         mapOpen = false
+        codexOpen = false
     } else if (talkingTo !== null) {
         if (key === 'e') interact()   // while talking, only E does anything
     } else if (key === 'i') {
         inventoryOpen = !inventoryOpen
         mapOpen = false
+        codexOpen = false
     } else if (key === 'm') {
         mapOpen = !mapOpen
         inventoryOpen = false
-    } else if (key === 'e' && !inventoryOpen && !mapOpen) {
+        codexOpen = false
+    } else if (key === 'c') {
+        codexOpen = !codexOpen
+        inventoryOpen = false
+        mapOpen = false
+    } else if (codexOpen && (key === 'arrowup' || key === 'arrowdown')) {
+        const step = key === 'arrowup' ? -1 : 1
+        codexIndex = (codexIndex + step + civs.length) % civs.length
+    } else if (key === 'e' && !inventoryOpen && !mapOpen && !codexOpen) {
         interact()
     }
 })
@@ -452,9 +626,17 @@ function update() {
     let dy = 0
 
     // You can't walk while you're talking
-    if (talkingTo !== null || inventoryOpen || mapOpen) {
+    if (talkingTo !== null || inventoryOpen || mapOpen || codexOpen) {
         player.moving = false
         return
+    }
+
+    // Which region are we in? Show a banner when it changes
+    const region = regionAt(toTile(player.x + player.size / 2), toTile(player.y + player.size / 2))
+    if (region && region.name !== currentRegion) {
+        currentRegion = region.name
+        bannerRegion = region
+        bannerStartedAt = performance.now()
     }
 
     // Diagonal x & y
@@ -539,6 +721,11 @@ function draw() {
         drawItem(ctx, item.col * TILE, item.row * TILE, item.color, time)
     }
 
+    // Treasure chests
+    for (const chest of chestDefs) {
+        drawChest(ctx, chest.col * TILE, chest.row * TILE, openedChests.has(chest.id), time)
+    }
+
     // Draws the villagers (each one keeps its own color for its clothes)
     for (const npc of npcs) {
         drawPerson(
@@ -589,6 +776,11 @@ function draw() {
         active ? active.goal : done === quests.length ? 'All quests complete!' : 'Talk to a villager.',
     )
 
+    // The "ENTERING ..." banner
+    if (bannerRegion && time - bannerStartedAt < 3400) {
+        drawRegionBanner(ctx, w, bannerRegion.name, bannerRegion.subtitle, time - bannerStartedAt)
+    }
+
     if (inventoryOpen) {
         const entries = inventory.flatMap(id => {
             const def = itemDefs.find(i => i.id === id)
@@ -599,6 +791,10 @@ function draw() {
 
     if (mapOpen) {
         drawQuestMap(ctx, w, h, rows, questMarkers(), toTile(player.x + player.size / 2), toTile(player.y + player.size / 2), time)
+    }
+
+    if (codexOpen) {
+        drawCodex(ctx, w, h, codexEntries(), codexIndex)
     }
 
     // Dialogue box

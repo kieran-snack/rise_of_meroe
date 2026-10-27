@@ -249,6 +249,48 @@ function paintPyramid(ctx: CanvasRenderingContext2D, w: number, h: number) {
     ctx.fillRect(apexX - 3, baseY - 8, 6, 8)
 }
 
+// A tall carved stone pillar, like the stelae of Aksum. It is taller than its tile,
+// so it overlaps the tile above (that tile is drawn first, so the pillar goes on top).
+function drawStela(ctx: CanvasRenderingContext2D, x: number, y: number) {
+    // shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.22)'
+    ctx.beginPath()
+    ctx.ellipse(x + 16, y + 29, 11, 3, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    const bx = x + 9      // left edge at the base
+    const top = y - 30    // top of the pillar
+
+    // lit left half
+    ctx.fillStyle = '#9a968e'
+    ctx.beginPath()
+    ctx.moveTo(bx, y + 29)
+    ctx.lineTo(bx + 7, y + 29)
+    ctx.lineTo(bx + 7, top)
+    ctx.quadraticCurveTo(bx + 2, top - 1, bx + 1, top + 8)
+    ctx.closePath()
+    ctx.fill()
+
+    // shaded right half
+    ctx.fillStyle = '#76726b'
+    ctx.beginPath()
+    ctx.moveTo(bx + 7, y + 29)
+    ctx.lineTo(bx + 14, y + 29)
+    ctx.lineTo(bx + 12, top + 8)
+    ctx.quadraticCurveTo(bx + 11, top - 1, bx + 7, top)
+    ctx.closePath()
+    ctx.fill()
+
+    // carved "windows" up the side and a door at the base
+    ctx.fillStyle = 'rgba(40, 36, 30, 0.55)'
+    for (let wy = y - 18; wy < y + 14; wy += 12) {
+        ctx.fillRect(bx + 3, wy, 3, 5)
+        ctx.fillRect(bx + 8, wy, 3, 5)
+    }
+    ctx.fillStyle = '#4d4a45'
+    ctx.fillRect(bx + 4, y + 19, 6, 10)
+}
+
 // Draws the correct picture for one map character. `time` is in milliseconds
 // and is only used for the moving water and swaying palms.
 export function drawTileArt(
@@ -276,6 +318,10 @@ export function drawTileArt(
         case 'T':
             drawSand(ctx, x, y, col, row, n)
             drawPalm(ctx, x, y, time, col)
+            break
+        case 'S':
+            drawSand(ctx, x, y, col, row, n)
+            drawStela(ctx, x, y)
             break
         default:
             drawSand(ctx, x, y, col, row, n)
@@ -765,7 +811,7 @@ export function drawTitleScreen(ctx: CanvasRenderingContext2D, w: number, h: num
     // controls
     ctx.font = `600 17px ${FONT_BODY}`
     ctx.fillStyle = '#c9b98a'
-    ctx.fillText('WASD / Arrows: move      E: talk and pick up      I: inventory      M: map', cx, h - 36)
+    ctx.fillText('WASD / Arrows: move      E: talk and pick up      I: inventory      M: map      C: codex', cx, h - 36)
     ctx.restore()
 }
 
@@ -965,6 +1011,7 @@ const MAP_COLORS: Record<string, string> = {
     H: '#a9714b',
     P: '#c9974f',
     T: '#e8d3a0',
+    S: '#8d8a84',
 }
 
 export function drawQuestMap(
@@ -1095,3 +1142,209 @@ export function drawQuestMap(
     ctx.restore()
 }
 
+
+// ---------------------------------------------------------------------------
+// Treasure chests and the Codex
+// ---------------------------------------------------------------------------
+
+// A wooden chest with gold bands. (x, y) is the top-left corner of its tile.
+export function drawChest(ctx: CanvasRenderingContext2D, x: number, y: number, open: boolean, time: number) {
+    // shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.22)'
+    ctx.beginPath()
+    ctx.ellipse(x + 16, y + 27, 12, 4, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    // the box
+    ctx.fillStyle = '#7a4a24'
+    ctx.fillRect(x + 6, y + 15, 20, 11)
+    ctx.fillStyle = '#5b3416'
+    ctx.fillRect(x + 6, y + 23, 20, 3)
+    ctx.fillStyle = '#d4a82a'
+    ctx.fillRect(x + 9, y + 15, 3, 11)
+    ctx.fillRect(x + 20, y + 15, 3, 11)
+
+    if (open) {
+        // dark inside with a golden glow, and the lid tipped back
+        ctx.fillStyle = '#2a1a08'
+        ctx.fillRect(x + 7, y + 15, 18, 3)
+        ctx.fillStyle = 'rgba(240, 211, 110, 0.55)'
+        ctx.fillRect(x + 10, y + 15, 12, 2)
+        ctx.fillStyle = '#8b5a2b'
+        ctx.beginPath()
+        ctx.moveTo(x + 6, y + 15)
+        ctx.lineTo(x + 9, y + 6)
+        ctx.lineTo(x + 23, y + 6)
+        ctx.lineTo(x + 26, y + 15)
+        ctx.closePath()
+        ctx.fill()
+        ctx.fillStyle = '#d4a82a'
+        ctx.fillRect(x + 9, y + 7, 3, 7)
+        ctx.fillRect(x + 20, y + 7, 3, 7)
+    } else {
+        // rounded lid, a lock, and a sparkle so you notice it
+        ctx.fillStyle = '#8b5a2b'
+        ctx.beginPath()
+        ctx.roundRect(x + 6, y + 8, 20, 9, [6, 6, 0, 0])
+        ctx.fill()
+        ctx.fillStyle = '#d4a82a'
+        ctx.fillRect(x + 9, y + 9, 3, 8)
+        ctx.fillRect(x + 20, y + 9, 3, 8)
+        ctx.fillStyle = '#f0d36e'
+        ctx.fillRect(x + 14, y + 14, 4, 5)
+        const s = (Math.sin(time / 220 + x) + 1) / 2
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.4 + 0.6 * s})`
+        diamond(ctx, x + 25, y + 6, 2 + s * 2)
+    }
+}
+
+// One page of the Codex.
+export interface CodexEntry {
+    name: string
+    years: string
+    relation: string
+    summary: string
+    unlocked: boolean
+}
+
+// The Codex: a list of civilizations on the left, the selected one on the right.
+export function drawCodex(ctx: CanvasRenderingContext2D, w: number, h: number, entries: CodexEntry[], selected: number) {
+    ctx.save()
+    ctx.fillStyle = 'rgba(14, 9, 5, 0.85)'
+    ctx.fillRect(0, 0, w, h)
+
+    const pw = Math.min(920, w - 40)
+    const ph = Math.min(540, h - 40)
+    const px = (w - pw) / 2
+    const py = (h - ph) / 2
+
+    ctx.fillStyle = 'rgba(26, 17, 10, 0.97)'
+    ctx.beginPath()
+    ctx.roundRect(px, py, pw, ph, 10)
+    ctx.fill()
+    ctx.strokeStyle = '#c9a227'
+    ctx.lineWidth = 3
+    ctx.stroke()
+    ctx.fillStyle = '#e8c75a'
+    for (const [cx, cy] of [[px, py], [px + pw, py], [px, py + ph], [px + pw, py + ph]]) {
+        diamond(ctx, cx, cy, 6)
+    }
+
+    const found = entries.filter(e => e.unlocked).length
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `700 22px ${FONT_TITLE}`
+    ctx.fillStyle = '#e8c75a'
+    ctx.fillText('CODEX: THE WORLD AROUND KUSH', w / 2, py + 36)
+    ctx.font = `600 16px ${FONT_BODY}`
+    ctx.fillStyle = '#c9b98a'
+    ctx.fillText(`Civilizations discovered: ${found} of ${entries.length}`, w / 2, py + 64)
+
+    // the list on the left
+    const listX = px + 24
+    const listW = Math.min(250, pw * 0.3)
+    entries.forEach((entry, i) => {
+        const ry = py + 92 + i * 52
+        const on = i === selected
+        ctx.fillStyle = on ? 'rgba(201, 162, 39, 0.18)' : 'rgba(255, 255, 255, 0.04)'
+        ctx.beginPath()
+        ctx.roundRect(listX, ry, listW, 44, 6)
+        ctx.fill()
+        ctx.strokeStyle = on ? '#e8c75a' : 'rgba(201, 162, 39, 0.3)'
+        ctx.lineWidth = on ? 2 : 1
+        ctx.stroke()
+        ctx.textAlign = 'left'
+        ctx.font = `700 13px ${FONT_TITLE}`
+        ctx.fillStyle = entry.unlocked ? '#f3ead6' : '#6e6350'
+        ctx.fillText(entry.unlocked ? entry.name.toUpperCase() : '???', listX + 14, ry + 22)
+    })
+
+    // the page on the right
+    const pageX = listX + listW + 30
+    const pageW = px + pw - 28 - pageX
+    const entry = entries[selected]
+    if (entry) {
+        ctx.textAlign = 'left'
+        if (entry.unlocked) {
+            ctx.font = `700 24px ${FONT_TITLE}`
+            ctx.fillStyle = '#e8c75a'
+            ctx.fillText(entry.name.toUpperCase(), pageX, py + 112)
+            ctx.font = `700 12px ${FONT_TITLE}`
+            ctx.fillStyle = '#c9b98a'
+            ctx.fillText(`${entry.years.toUpperCase()}   |   ${entry.relation.toUpperCase()}`, pageX, py + 142)
+            ctx.strokeStyle = 'rgba(201, 162, 39, 0.5)'
+            ctx.lineWidth = 1
+            ctx.beginPath()
+            ctx.moveTo(pageX, py + 158)
+            ctx.lineTo(pageX + pageW, py + 158)
+            ctx.stroke()
+            ctx.textBaseline = 'alphabetic'
+            ctx.font = `600 21px ${FONT_BODY}`
+            ctx.fillStyle = '#f3ead6'
+            wrapText(ctx, entry.summary, pageW).forEach((line, i) => {
+                ctx.fillText(line, pageX, py + 192 + i * 28)
+            })
+            ctx.textBaseline = 'middle'
+        } else {
+            ctx.font = `700 24px ${FONT_TITLE}`
+            ctx.fillStyle = '#6e6350'
+            ctx.fillText('UNDISCOVERED', pageX, py + 112)
+            ctx.textBaseline = 'alphabetic'
+            ctx.font = `600 21px ${FONT_BODY}`
+            ctx.fillStyle = '#c9b98a'
+            wrapText(ctx, 'Find treasure chests hidden around the land. Objects from other civilizations will unlock their pages.', pageW)
+                .forEach((line, i) => ctx.fillText(line, pageX, py + 192 + i * 28))
+            ctx.textBaseline = 'middle'
+        }
+    }
+
+    ctx.textAlign = 'center'
+    ctx.font = `700 12px ${FONT_TITLE}`
+    ctx.fillStyle = '#c9b98a'
+    ctx.fillText('UP / DOWN: BROWSE      PRESS C TO CLOSE', w / 2, py + ph - 22)
+    ctx.restore()
+}
+
+// ---------------------------------------------------------------------------
+// The banner that appears when you cross into a new region
+// ---------------------------------------------------------------------------
+
+// age = milliseconds since the banner appeared. It fades in, stays, then fades out.
+export function drawRegionBanner(ctx: CanvasRenderingContext2D, w: number, title: string, subtitle: string, age: number) {
+    const fadeIn = Math.min(1, age / 400)
+    const fadeOut = Math.min(1, Math.max(0, (3400 - age) / 600))
+    const alpha = Math.min(fadeIn, fadeOut)
+    if (alpha <= 0) return
+
+    const bw = Math.min(560, w - 40)
+    const bh = 84
+    const bx = (w - bw) / 2
+    const by = 18 - (1 - fadeIn) * 20   // slides down a little as it fades in
+
+    ctx.save()
+    ctx.globalAlpha = alpha
+    ctx.fillStyle = 'rgba(26, 17, 10, 0.92)'
+    ctx.beginPath()
+    ctx.roundRect(bx, by, bw, bh, 8)
+    ctx.fill()
+    ctx.strokeStyle = '#c9a227'
+    ctx.lineWidth = 2
+    ctx.stroke()
+    ctx.fillStyle = '#e8c75a'
+    for (const [cx, cy] of [[bx, by], [bx + bw, by], [bx, by + bh], [bx + bw, by + bh]]) {
+        diamond(ctx, cx, cy, 4)
+    }
+
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `700 11px ${FONT_TITLE}`
+    ctx.fillStyle = '#c9b98a'
+    ctx.fillText('ENTERING', w / 2, by + 18)
+    ctx.font = `700 24px ${FONT_TITLE}`
+    ctx.fillStyle = '#e8c75a'
+    ctx.fillText(title.toUpperCase(), w / 2, by + 42)
+    ctx.font = `600 16px ${FONT_BODY}`
+    ctx.fillStyle = '#f3ead6'
+    ctx.fillText(subtitle, w / 2, by + 67)
+    ctx.restore()
+}
