@@ -625,3 +625,473 @@ export function drawQuestPanel(
 
     ctx.restore()
 }
+
+
+// ---------------------------------------------------------------------------
+// Character designer options
+// ---------------------------------------------------------------------------
+export const PLAYER_SKINS = ['#5a3825', '#6b4226', '#7a4a2e', '#8d5a3b', '#a06b46', '#c28a5f']
+export const OUTFITS: Outfit[] = ['kilt', 'robe', 'dress']
+export const HAIRS: Hair[] = ['short', 'braids', 'bald', 'headwrap']
+export const CLOTH_COLORS = ['#f3ead6', '#9b2525', '#2f6fb5', '#2e7d32', '#7b3fa0', '#e0a030']
+
+// ---------------------------------------------------------------------------
+// Name tags, quest markers and items on the ground (drawn inside the camera)
+// ---------------------------------------------------------------------------
+
+// A small pill with a name in it. (cx, cy) is the middle of the pill.
+export function drawNameTag(ctx: CanvasRenderingContext2D, text: string, cx: number, cy: number) {
+    ctx.save()
+    const label = text.toUpperCase()
+    ctx.font = `700 11px ${FONT_TITLE}`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    const w = ctx.measureText(label).width + 16
+    ctx.fillStyle = 'rgba(26, 17, 10, 0.85)'
+    ctx.beginPath()
+    ctx.roundRect(cx - w / 2, cy - 9, w, 18, 9)
+    ctx.fill()
+    ctx.strokeStyle = '#c9a227'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.fillStyle = '#f3ead6'
+    ctx.fillText(label, cx, cy + 0.5)
+    ctx.restore()
+}
+
+// A bobbing gold "!" (new quest) or "?" (ready to hand in) above a villager.
+export function drawMarker(ctx: CanvasRenderingContext2D, symbol: string, cx: number, cy: number, time: number) {
+    ctx.save()
+    const y = cy + Math.sin(time / 250) * 3
+    ctx.fillStyle = '#e8c75a'
+    ctx.strokeStyle = '#6e4d0f'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.arc(cx, y, 9, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = '#2a1a08'
+    ctx.font = `700 14px ${FONT_TITLE}`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(symbol, cx, y + 1)
+    ctx.restore()
+}
+
+// An item lying on the ground. (x, y) is the top-left corner of its tile.
+export function drawItem(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, time: number) {
+    const bob = Math.sin(time / 300 + x) * 2
+
+    // shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)'
+    ctx.beginPath()
+    ctx.ellipse(x + 16, y + 27, 8, 3, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    // a lumpy rock / nugget shape
+    ctx.fillStyle = color
+    ctx.beginPath()
+    ctx.moveTo(x + 8, y + 24 + bob)
+    ctx.lineTo(x + 11, y + 15 + bob)
+    ctx.lineTo(x + 19, y + 12 + bob)
+    ctx.lineTo(x + 25, y + 19 + bob)
+    ctx.lineTo(x + 23, y + 25 + bob)
+    ctx.closePath()
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+
+    // shine
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.45)'
+    ctx.fillRect(x + 14, y + 16 + bob, 4, 2)
+
+    // twinkling sparkle so you notice it
+    const s = (Math.sin(time / 200 + x * 0.3) + 1) / 2
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.4 + 0.6 * s})`
+    diamond(ctx, x + 24, y + 11 + bob, 2 + s * 2)
+}
+
+// ---------------------------------------------------------------------------
+// Full-screen screens (drawn on top of the world, after the camera is reset)
+// ---------------------------------------------------------------------------
+
+export function drawTitleScreen(ctx: CanvasRenderingContext2D, w: number, h: number, time: number) {
+    ctx.save()
+    ctx.fillStyle = 'rgba(14, 9, 5, 0.72)'
+    ctx.fillRect(0, 0, w, h)
+
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    const cx = w / 2
+    const cy = h / 2
+    const size = Math.max(28, Math.min(84, w * 0.075))
+
+    // the title, with a shadow and a gold gradient
+    const title = 'THE RISE OF MEROË'
+    ctx.font = `700 ${size}px ${FONT_TITLE}`
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'
+    ctx.fillText(title, cx + 3, cy - size * 0.6 + 3)
+    const grad = ctx.createLinearGradient(0, cy - size * 1.1, 0, cy - size * 0.1)
+    grad.addColorStop(0, '#f6dc82')
+    grad.addColorStop(1, '#b8901f')
+    ctx.fillStyle = grad
+    ctx.fillText(title, cx, cy - size * 0.6)
+
+    // ornament: a line, a diamond, a line
+    const oy = cy + size * 0.05
+    ctx.strokeStyle = '#c9a227'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(cx - 200, oy)
+    ctx.lineTo(cx - 16, oy)
+    ctx.moveTo(cx + 16, oy)
+    ctx.lineTo(cx + 200, oy)
+    ctx.stroke()
+    ctx.fillStyle = '#e8c75a'
+    diamond(ctx, cx, oy, 7)
+
+    ctx.font = `600 ${Math.max(18, size * 0.32)}px ${FONT_BODY}`
+    ctx.fillStyle = '#f3ead6'
+    ctx.fillText('A journey through the Kingdom of Kush', cx, cy + size * 0.5)
+
+    // blinking prompt
+    if (Math.floor(time / 600) % 2 === 0) {
+        ctx.font = `700 18px ${FONT_TITLE}`
+        ctx.fillStyle = '#e8c75a'
+        ctx.fillText('PRESS ENTER TO BEGIN', cx, cy + size * 1.3)
+    }
+
+    // controls
+    ctx.font = `600 17px ${FONT_BODY}`
+    ctx.fillStyle = '#c9b98a'
+    ctx.fillText('WASD / Arrows: move      E: talk and pick up      I: inventory      M: map', cx, h - 36)
+    ctx.restore()
+}
+
+// One line in the character designer.
+export interface DesignerRow {
+    label: string
+    text: string
+    swatch?: string   // a color circle to show next to the text
+}
+
+export function drawDesigner(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    rows: DesignerRow[],
+    selected: number,
+    look: PersonLook,
+    time: number,
+) {
+    ctx.save()
+    ctx.fillStyle = 'rgba(14, 9, 5, 0.88)'
+    ctx.fillRect(0, 0, w, h)
+
+    const pw = Math.min(780, w - 40)
+    const ph = Math.min(440, h - 40)
+    const px = (w - pw) / 2
+    const py = (h - ph) / 2
+
+    // panel
+    ctx.fillStyle = 'rgba(26, 17, 10, 0.97)'
+    ctx.beginPath()
+    ctx.roundRect(px, py, pw, ph, 10)
+    ctx.fill()
+    ctx.strokeStyle = '#c9a227'
+    ctx.lineWidth = 3
+    ctx.stroke()
+    ctx.fillStyle = '#e8c75a'
+    for (const [cx, cy] of [[px, py], [px + pw, py], [px, py + ph], [px + pw, py + ph]]) {
+        diamond(ctx, cx, cy, 6)
+    }
+
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `700 24px ${FONT_TITLE}`
+    ctx.fillStyle = '#e8c75a'
+    ctx.fillText('CREATE YOUR TRAVELER', w / 2, py + 38)
+
+    // the preview: a big character that slowly turns around
+    const scale = Math.max(3, Math.min(6, ph / 75))
+    const pvx = px + pw * 0.26
+    const pvy = py + ph * 0.8
+    ctx.fillStyle = 'rgba(201, 162, 39, 0.18)'
+    ctx.beginPath()
+    ctx.ellipse(pvx, pvy + 4, 12 * scale, 2.5 * scale, 0, 0, Math.PI * 2)
+    ctx.fill()
+    const faces: Facing[] = ['down', 'right', 'up', 'left']
+    ctx.save()
+    ctx.scale(scale, scale)
+    drawPerson(ctx, pvx / scale - 10, pvy / scale - 20, 20, look, faces[Math.floor(time / 1500) % 4], true, time)
+    ctx.restore()
+
+    // the options
+    const rx = px + pw * 0.5
+    const rw = pw * 0.46
+    const rowH = Math.min(52, (ph - 130) / rows.length)
+    rows.forEach((row, i) => {
+        const ry = py + 78 + i * rowH
+        const on = i === selected
+        ctx.fillStyle = on ? 'rgba(201, 162, 39, 0.16)' : 'rgba(255, 255, 255, 0.04)'
+        ctx.beginPath()
+        ctx.roundRect(rx, ry, rw, rowH - 8, 6)
+        ctx.fill()
+        ctx.strokeStyle = on ? '#e8c75a' : 'rgba(201, 162, 39, 0.35)'
+        ctx.lineWidth = on ? 2 : 1
+        ctx.stroke()
+
+        const mid = ry + (rowH - 8) / 2
+        ctx.textAlign = 'left'
+        ctx.font = `700 12px ${FONT_TITLE}`
+        ctx.fillStyle = '#e8c75a'
+        ctx.fillText(row.label.toUpperCase(), rx + 14, mid)
+
+        ctx.textAlign = 'right'
+        ctx.font = `600 20px ${FONT_BODY}`
+        ctx.fillStyle = '#f3ead6'
+        const textX = rx + rw - (on ? 34 : 16)
+        ctx.fillText(row.text, textX, mid)
+        if (row.swatch) {
+            const tw = ctx.measureText(row.text).width
+            ctx.fillStyle = row.swatch
+            ctx.beginPath()
+            ctx.arc(textX - tw - 16, mid, 8, 0, Math.PI * 2)
+            ctx.fill()
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)'
+            ctx.lineWidth = 1
+            ctx.stroke()
+        }
+
+        // little arrow on the selected row
+        if (on) {
+            ctx.fillStyle = '#e8c75a'
+            ctx.beginPath()
+            ctx.moveTo(rx + rw - 22, mid - 6)
+            ctx.lineTo(rx + rw - 12, mid)
+            ctx.lineTo(rx + rw - 22, mid + 6)
+            ctx.closePath()
+            ctx.fill()
+        }
+    })
+
+    ctx.textAlign = 'center'
+    ctx.font = `700 12px ${FONT_TITLE}`
+    ctx.fillStyle = '#c9b98a'
+    ctx.fillText('UP / DOWN: CHOOSE      LEFT / RIGHT: CHANGE      ENTER: BEGIN', w / 2, py + ph - 24)
+    ctx.restore()
+}
+
+// A thing in the inventory, ready to draw.
+export interface InventoryEntry {
+    name: string
+    color: string
+}
+
+export function drawInventory(ctx: CanvasRenderingContext2D, w: number, h: number, entries: InventoryEntry[], time: number) {
+    ctx.save()
+    ctx.fillStyle = 'rgba(14, 9, 5, 0.7)'
+    ctx.fillRect(0, 0, w, h)
+
+    const cols = 5
+    const slot = 92
+    const gap = 12
+    const gridRows = Math.max(2, Math.ceil(entries.length / cols))
+    const pw = cols * slot + (cols - 1) * gap + 60
+    const ph = 110 + gridRows * (slot + gap) + 20
+    const px = (w - pw) / 2
+    const py = (h - ph) / 2
+
+    ctx.fillStyle = 'rgba(26, 17, 10, 0.97)'
+    ctx.beginPath()
+    ctx.roundRect(px, py, pw, ph, 10)
+    ctx.fill()
+    ctx.strokeStyle = '#c9a227'
+    ctx.lineWidth = 3
+    ctx.stroke()
+    ctx.fillStyle = '#e8c75a'
+    for (const [cx, cy] of [[px, py], [px + pw, py], [px, py + ph], [px + pw, py + ph]]) {
+        diamond(ctx, cx, cy, 6)
+    }
+
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `700 22px ${FONT_TITLE}`
+    ctx.fillStyle = '#e8c75a'
+    ctx.fillText('INVENTORY', w / 2, py + 36)
+
+    for (let i = 0; i < cols * gridRows; i++) {
+        const sx = px + 30 + (i % cols) * (slot + gap)
+        const sy = py + 70 + Math.floor(i / cols) * (slot + gap)
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.05)'
+        ctx.beginPath()
+        ctx.roundRect(sx, sy, slot, slot, 6)
+        ctx.fill()
+        ctx.strokeStyle = 'rgba(201, 162, 39, 0.45)'
+        ctx.lineWidth = 1
+        ctx.stroke()
+
+        const entry = entries[i]
+        if (!entry) continue
+        drawItem(ctx, sx + (slot - TILE) / 2, sy + 8, entry.color, time)
+        ctx.font = `600 15px ${FONT_BODY}`
+        ctx.fillStyle = '#f3ead6'
+        ctx.fillText(entry.name, sx + slot / 2, sy + slot - 14)
+    }
+
+    if (entries.length === 0) {
+        ctx.font = `600 18px ${FONT_BODY}`
+        ctx.fillStyle = '#c9b98a'
+        ctx.fillText('Your pack is empty. Explore the land to find things.', w / 2, py + ph - 52)
+    }
+    ctx.font = `700 12px ${FONT_TITLE}`
+    ctx.fillStyle = '#c9b98a'
+    ctx.fillText('PRESS I TO CLOSE', w / 2, py + ph - 24)
+    ctx.restore()
+}
+
+// A spot on the quest map.
+export interface MapMarker {
+    col: number
+    row: number
+    kind: 'villager' | 'quest'
+    label?: string
+}
+
+const MAP_COLORS: Record<string, string> = {
+    '~': '#2f86c8',
+    '.': '#e8d3a0',
+    H: '#a9714b',
+    P: '#c9974f',
+    T: '#e8d3a0',
+}
+
+export function drawQuestMap(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    mapRows: string[],
+    markers: MapMarker[],
+    playerCol: number,
+    playerRow: number,
+    time: number,
+) {
+    ctx.save()
+    ctx.fillStyle = 'rgba(14, 9, 5, 0.85)'
+    ctx.fillRect(0, 0, w, h)
+
+    const cols = mapRows[0].length
+    const ts = Math.max(5, Math.floor(Math.min((w - 100) / cols, (h - 170) / mapRows.length)))
+    const mw = cols * ts
+    const mh = mapRows.length * ts
+    const ox = Math.round((w - mw) / 2)
+    const oy = Math.round((h - mh) / 2) + 6
+
+    // frame
+    ctx.fillStyle = 'rgba(26, 17, 10, 0.97)'
+    ctx.beginPath()
+    ctx.roundRect(ox - 18, oy - 58, mw + 36, mh + 112, 10)
+    ctx.fill()
+    ctx.strokeStyle = '#c9a227'
+    ctx.lineWidth = 3
+    ctx.stroke()
+
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `700 20px ${FONT_TITLE}`
+    ctx.fillStyle = '#e8c75a'
+    ctx.fillText('MAP OF KUSH', w / 2, oy - 32)
+
+    // the land
+    mapRows.forEach((line, r) => {
+        for (let c = 0; c < line.length; c++) {
+            const ch = line[c]
+            ctx.fillStyle = MAP_COLORS[ch] ?? MAP_COLORS['.']
+            ctx.fillRect(ox + c * ts, oy + r * ts, ts, ts)
+            if (ch === 'T') {
+                ctx.fillStyle = '#3f8f3f'
+                ctx.beginPath()
+                ctx.arc(ox + c * ts + ts / 2, oy + r * ts + ts / 2, ts * 0.38, 0, Math.PI * 2)
+                ctx.fill()
+            }
+        }
+    })
+
+    // villagers: a dot and a name
+    for (const m of markers) {
+        if (m.kind !== 'villager') continue
+        const mx = ox + m.col * ts + ts / 2
+        const my = oy + m.row * ts + ts / 2
+        ctx.fillStyle = '#f3ead6'
+        ctx.strokeStyle = '#2a1a08'
+        ctx.lineWidth = 1.5
+        ctx.beginPath()
+        ctx.arc(mx, my, Math.max(3, ts * 0.38), 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+        if (m.label) {
+            ctx.font = `700 10px ${FONT_TITLE}`
+            ctx.fillStyle = '#2a1a08'
+            ctx.fillText(m.label.toUpperCase(), mx, my - ts * 0.9 - 4)
+        }
+    }
+
+    // quest goals: a pulsing gold diamond
+    const pulse = 1 + Math.sin(time / 250) * 0.18
+    for (const m of markers) {
+        if (m.kind !== 'quest') continue
+        const mx = ox + m.col * ts + ts / 2
+        const my = oy + m.row * ts + ts / 2
+        const r = Math.max(5, ts * 0.8) * pulse
+        ctx.fillStyle = '#e8c75a'
+        ctx.strokeStyle = '#6e4d0f'
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.moveTo(mx, my - r)
+        ctx.lineTo(mx + r, my)
+        ctx.lineTo(mx, my + r)
+        ctx.lineTo(mx - r, my)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+    }
+
+    // you: a blinking white dot with a gold ring
+    if (Math.floor(time / 350) % 2 === 0) {
+        const mx = ox + playerCol * ts + ts / 2
+        const my = oy + playerRow * ts + ts / 2
+        ctx.fillStyle = '#ffffff'
+        ctx.strokeStyle = '#c9a227'
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.arc(mx, my, Math.max(4, ts * 0.5), 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+    }
+
+    // legend
+    const ly = oy + mh + 28
+    ctx.textAlign = 'left'
+    ctx.font = `600 16px ${FONT_BODY}`
+    ctx.fillStyle = '#e8c75a'
+    diamond(ctx, ox + 8, ly, 6)
+    ctx.fillStyle = '#f3ead6'
+    ctx.fillText('Quest goal', ox + 22, ly)
+    ctx.beginPath()
+    ctx.arc(ox + 140, ly, 5, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillText('Villager', ox + 152, ly)
+    ctx.fillStyle = '#ffffff'
+    ctx.beginPath()
+    ctx.arc(ox + 250, ly, 5, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = '#f3ead6'
+    ctx.fillText('You', ox + 262, ly)
+    ctx.textAlign = 'right'
+    ctx.font = `700 12px ${FONT_TITLE}`
+    ctx.fillStyle = '#c9b98a'
+    ctx.fillText('PRESS M TO CLOSE', ox + mw, ly)
+    ctx.restore()
+}
+

@@ -1,19 +1,12 @@
-/******************************************************************************
- * File:        quests.ts
- * Author:      Kieran Provost
- * Date:        10-26-26 (Last edit)
- * Description: The quest and fact data for the Rise of Meroe.
- * 
- * License:     MIT
- ******************************************************************************/
-
 export interface Quest {
     id: string
     title: string
     giver: string
     target: string
+    needs?: string[]     // item ids you must bring (see items.ts)
     offer: string[]
     goal: string
+    reminder?: string[]  // what the target says if you don't have the items yet
     thanks: string[]
     fact: string
 }
@@ -24,9 +17,14 @@ export const quests: Quest[] = [
         title: 'The Iron Message',
         giver: 'Mustafa',
         target: 'Fatima',
-        offer: ['Welcome to Meroë! Our smiths make iron tools.', 'Please tell Fatima her iron order is ready.'],
-        goal: 'Tell Fatima the iron is ready.',
-        thanks: ['Wonderful! The iron is ready at last.'],
+        needs: ['iron-ore'],
+        offer: [
+            'Welcome to Meroë! My forge needs iron ore to make tools.',
+            'Search the sandy ground east of my forge for some, then take it to Fatima. She trades my iron for me.',
+        ],
+        goal: 'Find iron ore and bring it to Fatima.',
+        reminder: ['Have you found the iron ore yet? Mustafa said to look east of his forge.'],
+        thanks: ['Iron ore! Wonderful. Mustafa will be pleased.'],
         fact: 'Meroë was one of the great iron-working centers of ancient Africa. Large heaps of leftover iron slag can still be seen at the site today.',
     },
     {
@@ -34,9 +32,14 @@ export const quests: Quest[] = [
         title: 'Word of the Queen',
         giver: 'Fatima',
         target: 'Amadi',
-        offer: ['Our land is ruled by a Kandake, a queen.', 'Please bring this news to Amadi.'],
-        goal: 'Bring the news of the Kandake to Amadi.',
-        thanks: ['Long live the Kandake!'],
+        needs: ['gold-nugget'],
+        offer: [
+            'Our land is ruled by a Kandake, a queen.',
+            'Her officials collect gold. Find a gold nugget in the northeast desert and take it to Amadi.',
+        ],
+        goal: 'Find a gold nugget and bring it to Amadi.',
+        reminder: ['I am waiting for the gold nugget. Try the desert in the northeast.'],
+        thanks: ['Gold for the Kandake! I will carry it to her officials. Long live the Kandake!'],
         fact: 'Kush was sometimes ruled by powerful queens called Kandake. Around 25 BCE, the Kushite queen Amanirenas fought against the Roman Empire.',
     },
     {
@@ -44,10 +47,14 @@ export const quests: Quest[] = [
         title: 'The Steep Pyramids',
         giver: 'Mahmoud',
         target: 'Kasha',
-        offer: ['Do you see the pyramids to the south?', 'Tell Kasha the builders need more stone.'],
-        goal: 'Tell Kasha the builders need stone.',
-        thanks: ['I will send stone to the builders today.'],
+        needs: ['sandstone'],
+        offer: [
+            'Do you see the pyramids to the east?',
+            'The builders need sandstone. Find a block near the pyramids and take it to Kasha, who keeps count of the stone.',
+        ],
+        goal: 'Find a sandstone block and bring it to Kasha.',
+        reminder: ['I still need a block of sandstone. There should be one near the pyramids.'],
+        thanks: ['Sandstone! I will mark it in my records.'],
         fact: 'Sudan has more pyramids than Egypt, over 200 of them. Kushite pyramids are smaller and much steeper than Egyptian ones.',
-    }
-        
+    },
 ]
