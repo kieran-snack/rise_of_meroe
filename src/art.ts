@@ -1282,7 +1282,7 @@ export function drawTitleScreen(ctx: CanvasRenderingContext2D, w: number, h: num
     ctx.font = `600 15px ${FONT_BODY}`
     ctx.fillStyle = '#c9b98a'
     ctx.fillText('UP / DOWN and ENTER, or click', cx, h - 52)
-    ctx.fillText('A social studies project about ancient Kush, by Kieran Provost', cx, h - 28)
+    ctx.fillText('Ancient Empires Project about Ancient Kush, by Kieran Provost :)', cx, h - 28)
     ctx.restore()
 }
 
@@ -1779,7 +1779,8 @@ export function drawInventory(
     ctx.strokeStyle = 'rgba(201, 162, 39, 0.5)'
     ctx.lineWidth = 1
     ctx.stroke()
-    const scale = Math.max(2.5, Math.min(4, (b.h - 100) / 31))
+    // the character shrinks a little when the box is short, so the stats below always fit
+    const scale = Math.max(1.8, Math.min(4, (b.h - 64 - stats.length * 17) / 31))
     const feetY = b.y + 12 + 31 * scale
     ctx.fillStyle = 'rgba(201, 162, 39, 0.18)'
     ctx.beginPath()
@@ -1796,7 +1797,8 @@ export function drawInventory(
     ctx.fillText(name.toUpperCase(), b.x + b.w / 2, feetY + 22)
     ctx.font = `600 15px ${FONT_BODY}`
     ctx.fillStyle = '#f3ead6'
-    stats.forEach((line, i) => ctx.fillText(line, b.x + b.w / 2, feetY + 44 + i * 17))
+    const lineH = Math.max(13, Math.min(17, (b.y + b.h - 8 - (feetY + 44)) / Math.max(1, stats.length - 1)))
+    stats.forEach((line, i) => ctx.fillText(line, b.x + b.w / 2, feetY + 44 + i * lineH))
 
     // the slots: the 3 big rows, then the hotbar below them
     layout.main.forEach((r, i) => drawClickableSlot(ctx, r, pack[HOTBAR_SLOTS + i], 'slot:main:' + i))
