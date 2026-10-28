@@ -10,16 +10,20 @@
 
 // All the tile and character drawing lives in art.ts
 // (TILE, the size of one square in pixels, is defined there)
-import type { CodexEntry, DesignerRow, Facing, Hair, MapMarker, Outfit } from './art.ts'
+import type { CodexEntry, DesignerRow, Facing, Hair, MapMarker, Outfit, Slot } from './art.ts'
 import {
-    CLOTH_COLORS, HAIRS, OUTFITS, PLAYER_SKINS, TILE,
-    drawChest, drawCodex, drawDesigner, drawDialogue, drawInventory, drawItem, drawMarker, drawNameTag,
-    drawPerson, drawQuestMap, drawQuestPanel, drawRegionBanner, drawTileArt, drawTitleScreen, skinFor,
+    CHEST_SIZE, CLOTH_COLORS, HAIRS, HOTBAR_SLOTS, OUTFITS, PACK_SIZE, PLAYER_SKINS, TILE,
+    buttonAt, clearButtons, drawChest, drawChestScreen, drawCodex, drawDesigner, drawDialogue, drawHeld, drawHotbar,
+    drawInventory, drawItem, drawMarker, drawNameTag, drawNotice, drawPerson, drawQuestMap, drawQuestPanel,
+    drawRegionBanner, drawTileArt, drawTitleScreen, drawTooltip, pointer, skinFor, windowLayout,
 } from './art.ts'
+import type { Held, Slots, Stack } from './inventory.ts'
+import { addTo, countIn, leftClick, makeSlots, removeFrom, rightClick, shiftClick, takeOne } from './inventory.ts'
 // Importing our items and quests
 import type { ChestDef } from './chests.ts'
-import { chestDefs } from './chests.ts'
+import { chestDefs, lootTable } from './chests.ts'
 import { civs } from './civs.ts'
+import { BLOCK_CHARS, REGIONS, blockInfo, buildWorld, isSolidChar } from './worldgen.ts'
 import type { ItemDef } from './items.ts'
 import { itemDefs } from './items.ts'
 import type { Quest } from './quests.ts'
@@ -46,68 +50,10 @@ resize()
 addEventListener('resize', resize)
 
 // Defining the map in ASCII characters
-const rows = [
-  '~~...........................................................................~~~',
-  '~~...........................................................................~~~',
-  '~~~..........................................................................~~~',
-  '~~~.T..................T................PP................T..................~~~',
-  '~~~.....T...............................PP..............................T....~~~',
-  '~~.............T...........HH.......................T........................~~~',
-  '~~.........................HH...................................T.........~~~~~~',
-  '~~...T.....................................PP.............................~~~~~~',
-  '~~.........................................PP.............................~~~~~~',
-  '~~........HH.....HH..................................................T....~~~~~~',
-  '~~........HH.....HH...................PP.....................HH..........~~~~~~~',
-  '~~..T............................HH...PP.....................HH..........~~~~~~~',
-  '~~~.....................T........HH.......T..............................~~~~~~~',
-  '~~~......................................................................~~~~~~~',
-  '~~..................................T..................HH................~~~~~~~',
-  '~~....T............HH.........T...................T....HH................~~~~~~~',
-  '~~..........HH.....HH....................................................~~~~~~~',
-  '~~.......................................................................~~~~~~~',
-  '~~................................HH..................................HH.~~~~~~~',
-  '~~..T.....................................................................~~~~~~',
-  '~~~.........T...........................T...............T.................~~~~~~',
-  '~~~.......................................................................~~~~~~',
-  '~~..............T.................T...........................T...........~~~~~~',
-  '~~...T.......................................................................~~~',
-  '~~..................HH......HH..............T................................~~~',
-  '~~..................HH......HH..................T............................~~~',
-  '~~......T.............................T.............................T........~~~',
-  '~~...........................................................................~~~',
-  '~~...........................................................................~~~',
-  '~~...........................................................................~~~',
-  '~~~..........................................................................~~~',
-  '~~~..........................................................................~~~',
-  '~~~.T........................................................................~~~',
-  '~~~.......HH..................HH...T.......................................T.~~~',
-  '~~................T...........HH............T................................~~~',
-  '~~..........................................................T................~~~',
-  '~~............T..........T...................................................~~~',
-  '~~.........HH.........................................HH.....................~~~',
-  '~~.T.......HH.......................PP..........T.....HH.....................~~~',
-  '~~....................HH.....T......PP.......................................~~~',
-  '~~......T......T......HH........................................T.........HH.~~~',
-  '~~...T.......................................................................~~~',
-  '~~......................T........T...........................................~~~',
-  '~~~....T....T.................................................HH.............~~~',
-  '~~~.T.................................T.......................HH.............~~~',
-  '~~~.........................T................................................~~~',
-  '~~~................T................................T.....................S..~~~',
-  '~~...................................................................S.......~~~',
-  '~~...........T....................PP.........................................~~~',
-  '~~....HH..........................PP....................................S....~~~',
-  '~~....HH.......................T..................HH.........................~~~',
-  '~~.T.................T.....T.................................................~~~',
-  '~~..............HH...................PP...............................S.....T~~~',
-  '~~...................................PP......................................~~~',
-  '~~~..T..................................................T....................~~~',
-  '~~~.......................HH.....PP..........................................~~~',
-  '~~~..............T........HH.....PP...........T...................T..........~~~',
-  '~~.......T............T.......PP.............................................~~~',
-  '~~....................................T......................................~~~',
-  '~~...........................................................................~~~',
-]
+// The world (it is built in worldgen.ts): the map, the named places and the named areas
+const WORLD = buildWorld()
+const rows = WORLD.rows
+const at = (name: string) => WORLD.anchors[name]   // a named place, like at('start')
 const MAP_W = rows[0].length
 const MAP_H = rows.length
 
@@ -124,13 +70,7 @@ interface Region {
 }
 
 // The first matching region wins, so smaller ones (like the border) go first.
-const regions: Region[] = [
-    { name: 'Syene, the Roman Border', subtitle: 'Egypt ends here, and Rome guards the frontier', col0: 0, col1: 45, row0: 22, row1: 29 },
-    { name: 'Egypt', subtitle: 'North of Kush, the land of the pharaohs', col0: 0, col1: 45, row0: 0, row1: 29 },
-    { name: 'The Red Sea Coast', subtitle: 'Greek and Roman ships trade along these shores', col0: 46, col1: 79, row0: 0, row1: 29 },
-    { name: 'Aksum', subtitle: 'A rising kingdom in the highlands to the southeast', col0: 40, col1: 79, row0: 30, row1: 59 },
-    { name: 'Kush', subtitle: 'Your homeland: Meroë and its villages along the Nile', col0: 0, col1: 39, row0: 30, row1: 59 },
-]
+const regions: Region[] = REGIONS.map(r => ({ name: r.name, subtitle: r.subtitle, ...WORLD.areas[r.area] }))
 
 function regionAt(col: number, row: number): Region | undefined {
     return regions.find(r => col >= r.col0 && col <= r.col1 && row >= r.row0 && row <= r.row1)
@@ -155,77 +95,98 @@ interface Npc {
 // Making list of villagers
 const npcs: Npc[] = [
     {
-        name: "Amadi", col: 6, row: 35, color: '#8e3b8e', outfit: 'kilt', hair: 'short',
+        name: "Amadi", ...at('amadi'), color: '#8e3b8e', outfit: 'kilt', hair: 'short',
         lines: [
             "Good day, traveler! I am a farmer, and I grow grain by the Nile.",
             "When the river floods, it leaves rich dark soil behind. That is why our barley and sorghum grow so well.",
         ],
     },
     {
-        name: "Mustafa", col: 20, row: 41, color: '#00ff84', outfit: 'kilt', hair: 'bald',
+        name: "Mustafa", ...at('mustafa'), color: '#00ff84', outfit: 'kilt', hair: 'bald',
         lines: [
             "The fire in my forge never goes cold.",
             "Iron makes our tools and our spears strong. Meroë is famous for its ironworking!",
         ],
     },
     {
-        name: "Fatima", col: 8, row: 47, color: '#9b2525', outfit: 'dress', hair: 'braids',
+        name: "Fatima", ...at('fatima'), color: '#9b2525', outfit: 'dress', hair: 'braids',
         lines: [
             "I am a trader. I carry goods up and down the Nile.",
             "Kush sends gold, ivory and ebony to faraway lands, and brings back fine goods in return.",
         ],
     },
     {
-        name: "Mahmoud", col: 30, row: 52, color: '#1c060a', outfit: 'robe', hair: 'short',
+        name: "Mahmoud", ...at('mahmoud'), color: '#1c060a', outfit: 'robe', hair: 'short',
         lines: [
             "Welcome to Meroë, traveler! For hundreds of years this city was the capital of the Kingdom of Kush.",
             "Look at the pyramids, where our kings and queens rest. They are much steeper than the pyramids of Egypt.",
         ],
     },
     {
-        name: "Kasha", col: 32, row: 35, color: '#5f12ff', outfit: 'dress', hair: 'headwrap',
+        name: "Kasha", ...at('kasha'), color: '#5f12ff', outfit: 'dress', hair: 'headwrap',
         lines: [
             "I am a scribe. I write in the Meroitic script, the alphabet of our people.",
             "Scholars today can read its sounds, but they still do not understand most of our language!",
         ],
     },
     {
-        name: "Hori", col: 14, row: 12, color: '#e8e0c8', outfit: 'robe', hair: 'bald',
+        name: "Tebe", ...at('tebe'), color: '#b5654a', outfit: 'dress', hair: 'braids',
+        lines: [
+            "I make pottery in the old style of Kerma.",
+            "Kerma potters were famous for thin bowls with a shiny black top and a red body.",
+        ],
+    },
+    {
+        name: "Kheli", ...at('kheli'), color: '#3b6e3b', outfit: 'kilt', hair: 'short',
+        lines: [
+            "I am an archer. The Egyptians called our land Ta-Seti, the Land of the Bow.",
+            "Kushite archers were so famous that kings of other lands wanted them in their armies.",
+        ],
+    },
+    {
+        name: "Sarem", ...at('sarem'), color: '#8a2b2b', outfit: 'robe', hair: 'bald',
+        lines: [
+            "I serve Apedemak, the lion god, in this temple at Naqa.",
+            "The walls show our kings and queens standing among the gods.",
+        ],
+    },
+    {
+        name: "Hori", ...at('hori'), color: '#e8e0c8', outfit: 'robe', hair: 'bald',
         lines: [
             "Welcome to Egypt, traveler. I serve in the temple of the god Amun.",
             "The people of Kush worship Amun too. They built a great temple to him at Jebel Barkal.",
         ],
     },
     {
-        name: "Nebet", col: 30, row: 8, color: '#2f6fb5', outfit: 'dress', hair: 'headwrap',
+        name: "Nebet", ...at('nebet'), color: '#2f6fb5', outfit: 'dress', hair: 'headwrap',
         lines: [
             "Egypt has always wanted what Kush has: gold, ivory and ebony.",
             "The lands to the south are rich, and we trade for their goods.",
         ],
     },
     {
-        name: "Marcus", col: 24, row: 27, color: '#a02020', outfit: 'robe', hair: 'short',
+        name: "Marcus", ...at('marcus'), color: '#a02020', outfit: 'robe', hair: 'short',
         lines: [
             "I am a soldier of Rome, posted at the border at Syene.",
             "Rome rules Egypt now. Not long ago, a Kushite queen attacked this town. We have not forgotten.",
         ],
     },
     {
-        name: "Demetrios", col: 66, row: 14, color: '#b8860b', outfit: 'robe', hair: 'short',
+        name: "Demetrios", ...at('demetrios'), color: '#b8860b', outfit: 'robe', hair: 'short',
         lines: [
             "I am a Greek merchant. My ships sail the Red Sea.",
             "Frankincense, ivory and gold: that is what my buyers want.",
         ],
     },
     {
-        name: "Berhane", col: 58, row: 40, color: '#2e7d32', outfit: 'robe', hair: 'headwrap',
+        name: "Berhane", ...at('berhane'), color: '#2e7d32', outfit: 'robe', hair: 'headwrap',
         lines: [
             "Welcome to Aksum! Our caravans cross the highlands to the sea.",
             "Our port, Adulis, trades with Egypt, Arabia and India.",
         ],
     },
     {
-        name: "Dawit", col: 66, row: 52, color: '#8a8f98', outfit: 'kilt', hair: 'bald',
+        name: "Dawit", ...at('dawit'), color: '#8a8f98', outfit: 'kilt', hair: 'bald',
         lines: [
             "I carve the tall stone pillars of Aksum, called stelae.",
             "Some are cut from a single block of granite and are taller than most buildings.",
@@ -239,14 +200,29 @@ const worldItems: ItemDef[] = itemDefs.filter(i => i.col >= 0)
 // Treasure chests: which ones you have opened so far
 const openedChests = new Set<string>()
 
+// The chests as they are placed in THIS game (their spots are picked at random when the game starts)
+const chests: ChestDef[] = chestDefs.map(c => ({ ...c }))
+
+// What is inside each chest you have opened (rolled the first time you open it)
+const chestContents = new Map<string, Slots>()
+
+// The chest window: which chest is open
+interface ChestUi {
+    chest: ChestDef
+}
+let chestUi: ChestUi | null = null
+
+// A short message shown at the top of the screen (like "New Codex entry unlocked")
+let noticeText = ''
+let noticeAt = -99999
+function notify(text: string) {
+    noticeText = text
+    noticeAt = performance.now()
+}
+
 // Returns true if a tile (or villager) is solid
 function isSolid(col: number, row: number): boolean {
-    const char = rows[row]?.[col]
-    return (
-    char === undefined ||
-    char === '~' || char === 'H' || char === 'T' || char === 'P' || char === 'S' ||
-    npcs.some(n => n.col === col && n.row === row)
-)
+    return isSolidChar(rows[row]?.[col]) || npcs.some(n => n.col === col && n.row === row)
 }
 
 // So we don't have to run Math.floor all the time
@@ -288,14 +264,13 @@ function nearbyItem(): ItemDef | undefined {
 function nearbyChest(): ChestDef | undefined {
     const px = player.x + player.size / 2
     const py = player.y + player.size / 2
-    return chestDefs.find(c =>
-        !openedChests.has(c.id) &&
+    return chests.find(c =>
         Math.hypot(px - (c.col * TILE + TILE / 2), py - (c.row * TILE + TILE / 2)) < 44)
 }
 
 
 // Defining player + adding characteristics (starts near the middle of the village)
-const player = { x: 13 * TILE + 6, y: 40 * TILE + 6, size: 20, speed: 2, facing: 'down' as Facing, moving: false }
+const player = { x: at('start').col * TILE + 6, y: at('start').row * TILE + 6, size: 20, speed: 2, facing: 'down' as Facing, moving: false }
 
 // What the player looks like (changed in the character designer)
 const appearance = {
@@ -316,24 +291,68 @@ let codexOpen = false
 let codexIndex = 0   // which civilization is selected in the Codex
 
 // --- Inventory -------------------------------------------------------------
-const inventory: string[] = []   // item ids
+// Your inventory: 36 slots. Slots 0-8 are the hotbar, slots 9-35 are the 3 big rows.
+const inventory: Slots = makeSlots(PACK_SIZE)
+
+// The stack stuck to your mouse cursor while you move things around
+const held: Held = { stack: null }
+
+// Which hotbar slot is selected (keys 1-9 or the mouse wheel), and when you last changed it
+let hotbarIndex = 0
+let hotbarChangedAt = -99999
+
+function selectHotbar(i: number) {
+    hotbarIndex = i
+    hotbarChangedAt = performance.now()
+}
 
 // Civilizations you have learned about (their Codex pages are unlocked)
 const discovered = new Set<string>()
 
-function addItem(id: string) {
-    inventory.push(id)
-    const civ = itemDefs.find(i => i.id === id)?.civ
-    if (civ) discovered.add(civ)
+// Unlocks the Codex page for any relic that is now in your inventory
+function checkDiscoveries() {
+    for (const s of inventory) {
+        const civId = s ? itemDefs.find(i => i.id === s.id)?.civ : undefined
+        if (civId && !discovered.has(civId)) {
+            discovered.add(civId)
+            const civ = civs.find(c => c.id === civId)
+            if (civ) notify('New Codex entry unlocked: ' + civ.name + '. Press C to read it.')
+        }
+    }
 }
 
-function hasItem(id: string): boolean {
-    return inventory.includes(id)
+// Items lying on the ground because you dropped them (with Q, or because your inventory was full)
+interface Drop {
+    id: string
+    col: number
+    row: number
+    count: number
+}
+const drops: Drop[] = []
+
+// Drop items on the tile you are standing on
+function dropAt(id: string, count: number) {
+    const col = toTile(player.x + player.size / 2)
+    const row = toTile(player.y + player.size / 2)
+    const same = drops.find(d => d.id === id && d.col === col && d.row === row)
+    if (same) same.count += count
+    else drops.push({ id, col, row, count })
 }
 
-function removeItem(id: string) {
-    const i = inventory.indexOf(id)
-    if (i >= 0) inventory.splice(i, 1)
+function addItem(id: string, n = 1) {
+    const left = addTo(inventory, id, n)
+    if (left > 0) {
+        dropAt(id, left)
+        notify('Your inventory is full, so it was dropped.')
+    }
+}
+
+function hasItem(id: string, n = 1): boolean {
+    return countIn(inventory, id) >= n
+}
+
+function removeItem(id: string, n = 1) {
+    removeFrom(inventory, id, n)
 }
 
 // --- Dialogue + quests -----------------------------------------------------
@@ -405,22 +424,137 @@ function pickUp(item: ItemDef) {
     startDialogue(speakerNamed(`Found: ${item.name}`), [item.fact])
 }
 
-// Open a chest: its loot goes into your inventory, and each piece teaches you something
-function openChest(chest: ChestDef) {
-    openedChests.add(chest.id)
-    const lines: string[] = []
-    for (const id of chest.loot) {
-        const def = itemDefs.find(i => i.id === id)
-        if (!def) continue
-        const isNew = def.civ !== undefined && !discovered.has(def.civ)
-        addItem(id)
-        lines.push(`${def.name}: ${def.fact}`)
-        if (isNew) {
-            const civ = civs.find(c => c.id === def.civ)
-            if (civ) lines.push(`New Codex entry unlocked: ${civ.name}. Press C to read it.`)
-        }
+// Roll what a chest holds: the items it always has, plus a few random extras
+function rollChest(chest: ChestDef): string[] {
+    const found = [...chest.loot]
+    const pool = [...lootTable]
+    for (let i = 0; i < (chest.rolls ?? 1) && pool.length > 0; i++) {
+        // take a random item out of the pool, so the same extra can't show up twice
+        found.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0])
     }
-    startDialogue(speakerNamed('Treasure Chest'), lines)
+    return found
+}
+
+// Open a chest: the first time, what is inside gets rolled and put into its slots
+function openChest(chest: ChestDef) {
+    if (!chestContents.has(chest.id)) {
+        const slots = makeSlots(CHEST_SIZE)
+        for (const id of rollChest(chest)) addTo(slots, id)
+        chestContents.set(chest.id, slots)
+    }
+    openedChests.add(chest.id)
+    chestUi = { chest }
+}
+
+// A dropped item close enough to pick up
+function nearbyDrop(): Drop | undefined {
+    const px = player.x + player.size / 2
+    const py = player.y + player.size / 2
+    return drops.find(d => Math.hypot(px - (d.col * TILE + TILE / 2), py - (d.row * TILE + TILE / 2)) < 40)
+}
+
+function pickUpDrop(d: Drop) {
+    drops.splice(drops.indexOf(d), 1)
+    addItem(d.id, d.count)   // (if it does not all fit, the rest is dropped again)
+}
+
+// What a stack looks like on screen (its name, color and fact come from items.ts)
+function viewOne(s: Stack | null): Slot | null {
+    if (!s) return null
+    const def = itemDefs.find(i => i.id === s.id)
+    return def ? { id: s.id, name: def.name, color: def.color, count: s.count, fact: def.fact } : null
+}
+
+function viewOf(slots: Slots): (Slot | null)[] {
+    return slots.map(viewOne)
+}
+
+// The item under a 'slot:...' or 'hotbar:...' button (null if it is empty or not a slot)
+function slotForButton(id: string | null): Slot | null {
+    if (!id) return null
+    if (id.startsWith('hotbar:')) return viewOne(inventory[Number(id.slice(7))])
+    if (!id.startsWith('slot:')) return null
+    const [, region, num] = id.split(':')
+    const i = Number(num)
+    if (region === 'hotbar') return viewOne(inventory[i])
+    if (region === 'main') return viewOne(inventory[HOTBAR_SLOTS + i])
+    if (region === 'chest' && chestUi) return viewOne(chestContents.get(chestUi.chest.id)?.[i] ?? null)
+    return null
+}
+
+// Close every window. Anything stuck to the mouse goes back into your inventory.
+function closeWindows() {
+    if (held.stack) {
+        const left = addTo(inventory, held.stack.id, held.stack.count)
+        if (left > 0) dropAt(held.stack.id, left)
+        held.stack = null
+    }
+    inventoryOpen = false
+    mapOpen = false
+    codexOpen = false
+    chestUi = null
+}
+
+// A click on one of the slots in the inventory or chest window
+function slotClick(id: string, mouseButton: number, shift: boolean) {
+    const [, region, num] = id.split(':')
+    const chestSlots = chestUi ? chestContents.get(chestUi.chest.id) : undefined
+    let slots: Slots
+    let index: number
+    if (region === 'chest' && chestSlots) {
+        slots = chestSlots
+        index = Number(num)
+    } else if (region === 'hotbar') {
+        slots = inventory
+        index = Number(num)
+    } else if (region === 'main') {
+        slots = inventory
+        index = HOTBAR_SLOTS + Number(num)
+    } else {
+        return
+    }
+
+    if (shift) {
+        // shift-click sends the whole stack to the other side
+        if (region === 'chest') {
+            shiftClick(slots, index, [
+                { slots: inventory, from: 0, to: HOTBAR_SLOTS },
+                { slots: inventory, from: HOTBAR_SLOTS, to: PACK_SIZE },
+            ])
+        } else if (chestSlots) {
+            shiftClick(slots, index, [{ slots: chestSlots, from: 0, to: CHEST_SIZE }])
+        } else if (region === 'hotbar') {
+            shiftClick(slots, index, [{ slots: inventory, from: HOTBAR_SLOTS, to: PACK_SIZE }])
+        } else {
+            shiftClick(slots, index, [{ slots: inventory, from: 0, to: HOTBAR_SLOTS }])
+        }
+    } else if (mouseButton === 2) {
+        rightClick(slots, index, held)
+    } else {
+        leftClick(slots, index, held)
+    }
+}
+
+// Q drops ONE item: the one under the mouse in a window, the one stuck to the mouse,
+// or the one in your selected hotbar slot when no window is open
+function dropWithQ() {
+    if (!inventoryOpen && chestUi === null) {
+        if (talkingTo !== null || mapOpen || codexOpen) return
+        const id = takeOne(inventory, hotbarIndex)
+        if (id) dropAt(id, 1)
+        return
+    }
+    const under = buttonAt(pointer.x, pointer.y)
+    if (under && under.startsWith('slot:') && !under.startsWith('slot:chest:')) {
+        const [, region, num] = under.split(':')
+        const index = region === 'hotbar' ? Number(num) : HOTBAR_SLOTS + Number(num)
+        const id = takeOne(inventory, index)
+        if (id) dropAt(id, 1)
+    } else if (held.stack) {
+        dropAt(held.stack.id, 1)
+        held.stack.count--
+        if (held.stack.count === 0) held.stack = null
+    }
 }
 
 // Called when the last line of a conversation is dismissed
@@ -463,6 +597,11 @@ function interact() {
         const item = nearbyItem()
         if (item) {
             pickUp(item)
+            return
+        }
+        const drop = nearbyDrop()
+        if (drop) {
+            pickUpDrop(drop)
             return
         }
         const chest = nearbyChest()
@@ -576,7 +715,37 @@ const keys = new Set<string>()
 addEventListener('keydown', (e) => keys.add(e.key.toLowerCase()))
 addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()))
 
-// See if you are pressing E
+// What happens when a button is clicked. The ids come from the draw functions in art.ts.
+function onButton(id: string, mouseButton: number, shift: boolean) {
+    if (screen === 'title') {
+        if (id === 'title-start') screen = 'designer'
+        return
+    }
+    if (screen === 'designer') {
+        if (id.startsWith('designer-row-')) {
+            designerRow = Number(id.slice(13))
+        } else if (id.startsWith('designer-left-')) {
+            designerRow = Number(id.slice(14))
+            changeOption(-1)
+        } else if (id.startsWith('designer-right-')) {
+            designerRow = Number(id.slice(15))
+            changeOption(1)
+        } else if (id === 'designer-begin') {
+            if (playerName.trim() === '') playerName = 'Traveler'
+            screen = 'playing'
+        }
+        return
+    }
+
+    // screen === 'playing'
+    if (id === 'dialogue') {
+        if (talkingTo !== null) interact()   // only while a conversation is open
+    } else if (id === 'close') closeWindows()
+    else if (id.startsWith('codex-entry-')) codexIndex = Number(id.slice(12))
+    else if (id.startsWith('hotbar:')) selectHotbar(Number(id.slice(7)))
+    else if (id.startsWith('slot:')) slotClick(id, mouseButton, shift)
+}
+
 // Keys that do something once per press (not held down)
 addEventListener('keydown', (e) => {
     if (e.repeat) return
@@ -593,30 +762,75 @@ addEventListener('keydown', (e) => {
 
     // screen === 'playing'
     if (key === 'escape') {
-        inventoryOpen = false
-        mapOpen = false
-        codexOpen = false
-    } else if (talkingTo !== null) {
+        closeWindows()
+        return
+    }
+    if (key === 'q') {
+        dropWithQ()
+        return
+    }
+    if (chestUi !== null) {
+        if (key === 'e' || key === 'i') closeWindows()   // like in Minecraft, E closes the chest
+        return
+    }
+    if (talkingTo !== null) {
         if (key === 'e') interact()   // while talking, only E does anything
-    } else if (key === 'i') {
-        inventoryOpen = !inventoryOpen
-        mapOpen = false
-        codexOpen = false
+        return
+    }
+    if (key === 'i') {
+        const wasOpen = inventoryOpen
+        closeWindows()
+        inventoryOpen = !wasOpen
     } else if (key === 'm') {
-        mapOpen = !mapOpen
-        inventoryOpen = false
-        codexOpen = false
+        const wasOpen = mapOpen
+        closeWindows()
+        mapOpen = !wasOpen
     } else if (key === 'c') {
-        codexOpen = !codexOpen
-        inventoryOpen = false
-        mapOpen = false
+        const wasOpen = codexOpen
+        closeWindows()
+        codexOpen = !wasOpen
     } else if (codexOpen && (key === 'arrowup' || key === 'arrowdown')) {
         const step = key === 'arrowup' ? -1 : 1
         codexIndex = (codexIndex + step + civs.length) % civs.length
-    } else if (key === 'e' && !inventoryOpen && !mapOpen && !codexOpen) {
-        interact()
+    } else if (key === 'e') {
+        if (inventoryOpen) closeWindows()
+        else if (!mapOpen && !codexOpen) interact()
+    } else if (key.length === 1 && key >= '1' && key <= '9' && !inventoryOpen && !mapOpen && !codexOpen) {
+        selectHotbar(Number(key) - 1)
     }
 })
+
+// --- Mouse -----------------------------------------------------------------
+// Remember where the mouse is (art.ts uses this for hover highlights and tooltips)
+function setPointer(e: MouseEvent) {
+    const r = canvas.getBoundingClientRect()
+    pointer.x = e.clientX - r.left
+    pointer.y = e.clientY - r.top
+}
+addEventListener('mousemove', setPointer)
+
+// No right-click menu on the game
+canvas.addEventListener('contextmenu', (e) => e.preventDefault())
+
+canvas.addEventListener('mousedown', (e) => {
+    setPointer(e)
+    const id = buttonAt(pointer.x, pointer.y)
+    if (id === null) {
+        // clicking outside a window while carrying something drops it, like in Minecraft
+        if (screen === 'playing' && (inventoryOpen || chestUi !== null) && held.stack) {
+            dropAt(held.stack.id, held.stack.count)
+            held.stack = null
+        }
+        return
+    }
+    onButton(id, e.button, e.shiftKey)
+})
+
+// The mouse wheel changes the selected hotbar slot
+addEventListener('wheel', (e) => {
+    if (screen !== 'playing' || inventoryOpen || mapOpen || codexOpen || chestUi !== null || talkingTo !== null) return
+    selectHotbar((hotbarIndex + (e.deltaY > 0 ? 1 : HOTBAR_SLOTS - 1)) % HOTBAR_SLOTS)
+}, { passive: true })
 
 
 // Function to update the key listeners, fix diagonal speed, and clamping the player's
@@ -626,7 +840,7 @@ function update() {
     let dy = 0
 
     // You can't walk while you're talking
-    if (talkingTo !== null || inventoryOpen || mapOpen || codexOpen) {
+    if (talkingTo !== null || inventoryOpen || mapOpen || codexOpen || chestUi !== null) {
         player.moving = false
         return
     }
@@ -685,6 +899,7 @@ function cameraAxis(playerPos: number, view: number, world: number): number {
 
 // Drawing the canvas
 function draw() {
+    clearButtons()   // the draw functions below list everything that can be clicked
     const time = performance.now()
     const w = canvas.width
     const h = canvas.height
@@ -711,6 +926,7 @@ function draw() {
                 down: rows[row + 1]?.[col] ?? ' ',
                 left: rows[row][col - 1] ?? ' ',
                 right: rows[row][col + 1] ?? ' ',
+                block: BLOCK_CHARS.includes(rows[row][col]) ? blockInfo(rows, col, row) : undefined,
             }
             drawTileArt(ctx, rows[row][col], col * TILE, row * TILE, col, row, time, neighbors)
         }
@@ -721,8 +937,14 @@ function draw() {
         drawItem(ctx, item.col * TILE, item.row * TILE, item.color, time)
     }
 
+    // Items you dropped
+    for (const d of drops) {
+        const def = itemDefs.find(i => i.id === d.id)
+        if (def) drawItem(ctx, d.col * TILE, d.row * TILE, def.color, time)
+    }
+
     // Treasure chests
-    for (const chest of chestDefs) {
+    for (const chest of chests) {
         drawChest(ctx, chest.col * TILE, chest.row * TILE, openedChests.has(chest.id), time)
     }
 
@@ -781,12 +1003,18 @@ function draw() {
         drawRegionBanner(ctx, w, bannerRegion.name, bannerRegion.subtitle, time - bannerStartedAt)
     }
 
+    // The hotbar along the bottom (hidden while a window or the dialogue box is open)
+    if (!inventoryOpen && !mapOpen && !codexOpen && chestUi === null && talkingTo === null) {
+        drawHotbar(ctx, w, h, viewOf(inventory), hotbarIndex, time - hotbarChangedAt)
+    }
+
     if (inventoryOpen) {
-        const entries = inventory.flatMap(id => {
-            const def = itemDefs.find(i => i.id === id)
-            return def ? [{ name: def.name, color: def.color }] : []
-        })
-        drawInventory(ctx, w, h, entries, time)
+        const stats = [
+            'Quests: ' + done + ' of ' + quests.length,
+            'Codex: ' + discovered.size + ' of ' + civs.length,
+            'Chests opened: ' + openedChests.size + ' of ' + chests.length,
+        ]
+        drawInventory(ctx, w, h, windowLayout(w, h, false), viewOf(inventory), appearance, playerName, stats, time)
     }
 
     if (mapOpen) {
@@ -797,19 +1025,121 @@ function draw() {
         drawCodex(ctx, w, h, codexEntries(), codexIndex)
     }
 
+    if (chestUi !== null) {
+        const inside = chestContents.get(chestUi.chest.id) ?? makeSlots(CHEST_SIZE)
+        drawChestScreen(ctx, w, h, windowLayout(w, h, true), viewOf(inside), viewOf(inventory))
+    }
+
+    // The short message at the top (new Codex entries and so on)
+    if (time - noticeAt < 3500) {
+        drawNotice(ctx, w, noticeText, time - noticeAt)
+    }
+
     // Dialogue box
     if (talkingTo !== null) {
         // The animated box (slide-in, typewriter text) is drawn in art.ts
         const open = Math.min(1, (time - dialogueOpenedAt) / OPEN_MS)
         drawDialogue(ctx, w, h, talkingTo.name, currentLines[lineIndex], open, charsShown(), time)
     }
+
+    // The item stuck to the mouse, or else a tooltip for whatever the mouse is over
+    if (held.stack) {
+        const view = viewOne(held.stack)
+        if (view) drawHeld(ctx, view)
+    } else {
+        const tip = slotForButton(buttonAt(pointer.x, pointer.y))
+        if (tip) drawTooltip(ctx, w, h, tip)
+    }
+}
+
+// --- Random spots ----------------------------------------------------------
+// Which tiles can the player walk to from the start? (so nothing ends up behind water or a wall)
+function reachableTiles(): Set<string> {
+    const startCol = toTile(player.x)
+    const startRow = toTile(player.y)
+    const seen = new Set<string>([startCol + ',' + startRow])
+    const queue: [number, number][] = [[startCol, startRow]]
+    for (let head = 0; head < queue.length; head++) {
+        const [c, r] = queue[head]
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const key = (c + dx) + ',' + (r + dy)
+            if (!seen.has(key) && !isSolid(c + dx, r + dy)) {
+                seen.add(key)
+                queue.push([c + dx, r + dy])
+            }
+        }
+    }
+    return seen
+}
+
+// Is (col, row) within d tiles of anything in the list?
+function nearAny(col: number, row: number, list: { col: number; row: number }[], d: number): boolean {
+    return list.some(o => Math.abs(o.col - col) <= d && Math.abs(o.row - row) <= d)
+}
+
+const reachable = reachableTiles()
+
+// Spots that chests, resource nodes and animals have already been given
+const taken: { col: number; row: number }[] = []
+
+// Pick `count` random spots inside a named area of the world. A spot has to be open ground
+// you can walk to, with room around it, away from villagers and away from spots already given out.
+function pickSpots(
+    areaName: string,
+    count: number,
+    opts: { gap?: number; nearWater?: boolean } = {},
+): { col: number; row: number }[] {
+    const a = WORLD.areas[areaName]
+    const gap = opts.gap ?? 3
+    const candidates: { col: number; row: number }[] = []
+    for (let r = a.row0; r <= a.row1; r++) {
+        for (let c = a.col0; c <= a.col1; c++) {
+            if (!'.dg'.includes(rows[r]?.[c] ?? '#') || !reachable.has(c + ',' + r)) continue
+            const open = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => !isSolidChar(rows[r + dy]?.[c + dx])).length
+            if (open < 3 || nearAny(c, r, npcs, 2)) continue
+            if (opts.nearWater) {
+                let water = false
+                for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (rows[r + dy]?.[c + dx] === '~') water = true
+                if (!water) continue
+            }
+            candidates.push({ col: c, row: r })
+        }
+    }
+    const picked: { col: number; row: number }[] = []
+    while (picked.length < count && candidates.length > 0) {
+        const i = Math.floor(Math.random() * candidates.length)
+        const spot = candidates.splice(i, 1)[0]
+        if (taken.some(t => Math.hypot(t.col - spot.col, t.row - spot.row) < gap)) continue
+        picked.push(spot)
+        taken.push(spot)
+    }
+    if (picked.length < count) console.warn('only found ' + picked.length + ' of ' + count + ' spots in ' + areaName)
+    return picked
+}
+
+// Give every chest a random spot inside its area
+function scatterChests() {
+    for (const chest of chests) {
+        const [spot] = pickSpots(chest.area, 1, { gap: 7 })
+        if (spot) {
+            chest.col = spot.col
+            chest.row = spot.row
+        }
+    }
 }
 
 // Loop to run all the functions and update the frames
 function loop() {
-    if (screen === 'playing') update()
+    if (screen === 'playing') {
+        update()
+        checkDiscoveries()
+    }
     draw()
+    // a pointing hand over anything you can click
+    const under = buttonAt(pointer.x, pointer.y)
+    canvas.style.cursor = under !== null && under !== 'panel' ? 'pointer' : 'default'
     requestAnimationFrame(loop)
 }
 
+scatterChests()   // put the chests in random places
 loop()

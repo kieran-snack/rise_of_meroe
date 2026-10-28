@@ -20,15 +20,15 @@ export interface ItemDef {
 
 export const itemDefs: ItemDef[] = [
     {
-        id: 'iron-ore', name: 'Iron Ore', col: 25, row: 44, color: '#5b5f66',
+        id: 'iron-ore', name: 'Iron Ore', col: -1, row: -1, color: '#5b5f66',
         fact: 'Iron ore! Kushite smiths heated ore like this in furnaces fueled by charcoal. Meroë was so busy with ironworking that mounds of leftover slag are still there today.',
     },
     {
-        id: 'gold-nugget', name: 'Gold Nugget', col: 27, row: 34, color: '#e8c75a',
+        id: 'gold-nugget', name: 'Gold Nugget', col: -1, row: -1, color: '#e8c75a',
         fact: 'Gold! Nubia, the land of Kush, was famous for its gold. Its name may even come from the old Egyptian word for gold.',
     },
     {
-        id: 'sandstone', name: 'Sandstone Block', col: 32, row: 47, color: '#c9a265',
+        id: 'sandstone', name: 'Sandstone Block', col: -1, row: -1, color: '#c9a265',
         fact: 'A block of sandstone! Meroë\'s pyramids were built from sandstone blocks, and many had a small chapel built against one side for offerings.',
     },
     {
@@ -56,23 +56,55 @@ export const itemDefs: ItemDef[] = [
         fact: 'A gold coin from Aksum, a rising kingdom in the highlands of Ethiopia. Aksum grew strong in the same centuries that Meroë faded.',
     },
     {
-        id: 'ivory', name: 'Ivory Tusk', col: 33, row: 58, color: '#efe6cf',
+        id: 'ivory', name: 'Ivory Tusk', col: -1, row: -1, color: '#efe6cf',
         fact: 'Ivory! Elephant tusks were among the most valuable goods traded out of Africa. Craftsmen carved them into jewelry, boxes and furniture.',
     },
     {
-        id: 'ebony', name: 'Ebony Log', col: 7, row: 38, color: '#2b2018',
+        id: 'ebony', name: 'Ebony Log', col: -1, row: -1, color: '#2b2018',
         fact: 'Ebony is a very dark, very hard wood from Africa. Egyptians prized it for fine furniture and carvings.',
     },
     {
-        id: 'iron-bar', name: 'Iron Bar', col: 23, row: 43, color: '#6b6f75',
+        id: 'iron-bar', name: 'Iron Bar', col: -1, row: -1, color: '#6b6f75',
         fact: 'An iron bar, ready for the smith. Iron tools and weapons were stronger than bronze, which made ironworking a source of power.',
     },
     {
-        id: 'incense', name: 'Frankincense', col: 47, row: 45, color: '#d8c27a',
+        id: 'incense', name: 'Frankincense', col: -1, row: -1, color: '#d8c27a',
         fact: 'Frankincense is a sweet-smelling tree resin burned in temples. It was one of the most valuable trade goods of the ancient world.',
     },
     {
-        id: 'granite', name: 'Granite Block', col: 75, row: 55, color: '#a39e96',
+        id: 'granite', name: 'Granite Block', col: -1, row: -1, color: '#a39e96',
         fact: 'Granite is an extremely hard stone. Builders in Aksum cut and raised huge granite pillars without modern machines.',
+    },
+    {
+        id: 'cowrie', name: 'Cowrie Shell', col: -1, row: -1, color: '#f1e3cf',
+        fact: 'Cowrie shells come from the sea, yet they turn up in graves far inland in Africa. People wore them as jewelry, and traders carried them far from the coast.',
+    },
+    {
+        id: 'faience-beads', name: 'Blue Faience Beads', col: -1, row: -1, color: '#3aa6c4',
+        fact: 'Bright blue faience, made from ground quartz with a glassy glaze, was used for beads and amulets in both Egypt and Kush.',
+    },
+    {
+        id: 'ostrich-feathers', name: 'Ostrich Feathers', col: -1, row: -1, color: '#efe9dc',
+        fact: 'Ostrich feathers from the deserts south of Egypt were prized for fans and headdresses. They were a classic trade good from Nubia.',
+    },
+    {
+        id: 'leopard-skin', name: 'Leopard Skin', col: -1, row: -1, color: '#c8963e',
+        fact: 'Leopard skins from the lands south of Egypt, including Nubia, were worn by Egyptian priests during religious ceremonies.',
+    },
+    {
+        id: 'sorghum', name: 'Sorghum Grain', col: -1, row: -1, color: '#b9873f',
+        fact: 'Sorghum is a hardy grain that grows well in dry country. It was an important food in ancient Sudan.',
+    },
+    {
+        id: 'dates', name: 'Dates', col: -1, row: -1, color: '#6b3a1d',
+        fact: 'Date palms grew along the Nile. Dates are sweet and keep well, which made them good food for travelers.',
+    },
+    {
+        id: 'glass-beads', name: 'Glass Beads', col: -1, row: -1, color: '#4aa38f',
+        fact: 'Glass beads made in the Roman world reached Kush through trade, and some were buried with the people who owned them.',
+    },
+    {
+        id: 'copper-bracelet', name: 'Copper Bracelet', col: -1, row: -1, color: '#b86f3d',
+        fact: 'Metalworkers in Kush made jewelry and tools from copper and bronze, as well as from iron and gold.',
     },
 ]
