@@ -23,8 +23,8 @@ import {
     drawPlotOutline,
     drawQuestMap, drawQuestPanel,
     drawRegionBanner, drawStamina,
-    drawStation,
-    drawTileArt, drawTitleScreen, drawTooltip, pointer, skinFor, windowLayout,
+    drawStation, drawTutorial,
+    drawTileArt, drawTitleScreen, drawTooltip, drawWaypointArrow, drawWaypointBeacon, mapView, pointer, skinFor, windowLayout,
 } from './art.ts'
 import type { Held, Slots, Stack } from './inventory.ts'
 import { MAX_STACK, addTo, countIn, leftClick, makeSlots, removeFrom, rightClick, shiftClick, takeOne } from './inventory.ts'
@@ -331,6 +331,9 @@ type Screen = 'title' | 'howto' | 'designer' | 'playing' | 'ending'
 let screen: Screen = 'title'
 let inventoryOpen = false
 let mapOpen = false
+
+// Your waypoint (set by clicking the World Map), or null if you have none
+let waypoint: { col: number; row: number } | null = null
 let codexOpen = false
 let codexIndex = 0   // which page is selected in the Codex
 let codexTab: 'kush' | 'world' = 'kush'   // which tab of the Codex is showing
@@ -566,6 +569,7 @@ function pickUp(item: ItemDef) {
     addItem(item.id)
     worldItems.splice(worldItems.indexOf(item), 1)
     sfx('pickup')
+    tutorialDid('pickup')
     if (settings.factsEveryTime || !seenItems.has(item.id)) {
         seenItems.add(item.id)
         startDialogue(speakerNamed(`Found: ${item.name}`), [item.fact])
@@ -610,6 +614,7 @@ function pickUpDrop(d: Drop) {
     addItem(d.id, d.count)   // (if it does not all fit, the rest is dropped again)
     sfx('pickup')
     notify('+' + d.count + ' ' + nameOf(d.id))
+    tutorialDid('pickup')
 }
 
 // What a stack looks like on screen (its name, color and fact come from items.ts)
@@ -728,6 +733,7 @@ function finishTalking(npc: Npc) {
     const found = questFor(npc)
     if (found?.kind === 'offer') {
         questState.set(found.q.id, 'active') // accepted
+        tutorialDid('quest')
     } else if (found?.kind === 'thanks') {
         const q = found.q
         for (const id of q.needs ?? []) removeItem(id) // hand the items over
@@ -799,6 +805,7 @@ function tickFurnace() {
             furnaceSlots[i] = s.count > 1 ? { id: s.id, count: s.count - 1 } : null
         }
         furnaceSlots[2] = { id: FURNACE_BAR, count: (bar?.count ?? 0) + 1 }
+        tutorialDid('craft')   // smelting counts as crafting too
         const f = at('furnace')
         burst(f.col, f.row, '#ff9a3c')
         if (chestUi?.furnace) sfx('smelt')   // (only heard while the furnace window is open)
@@ -818,6 +825,7 @@ function craftRecipe(id: string) {
     addItem(r.output.id, r.output.count)
     notify('Crafted ' + r.output.count + ' ' + nameOf(r.output.id))
     sfx('craft')
+    tutorialDid('craft')
     if (!craftedBefore.has(r.id)) {
         craftedBefore.add(r.id)
         startDialogue(speakerNamed('Did you know?'), [r.fact])
@@ -884,7 +892,10 @@ function interact() {
             // distance to the edge of the plot (0 when you stand on it)
             const dx = Math.max(plot.col0 * TILE - px, 0, px - (plot.col1 + 1) * TILE)
             const dy = Math.max(plot.row0 * TILE - py, 0, py - (plot.row1 + 1) * TILE)
-            options.push({ d: Math.hypot(dx, dy), use: () => { panelUi = { kind: 'build', id: plot.def.id } } })
+            options.push({ d: Math.hypot(dx, dy), use: () => {
+                panelUi = { kind: 'build', id: plot.def.id }
+                tutorialDid('plot')
+            } })
         }
         const npc = nearbyNpc()
         if (npc) options.push({ d: dist(npc.col, npc.row), use: () => startDialogue(npc, linesFor(npc)) })
@@ -1046,6 +1057,15 @@ function onButton(id: string, mouseButton: number, shift: boolean) {
     if (id === 'dialogue') {
         if (talkingTo !== null) interact()   // only while a conversation is open
     } else if (id === 'close') closeWindows()
+    else if (id === 'map') {
+        // which tile was clicked? (the opposite of how the map is drawn)
+        const col = Math.floor((pointer.x - mapView.ox) / mapView.ts)
+        const row = Math.floor((pointer.y - mapView.oy) / mapView.ts)
+        const nearOld = waypoint !== null && Math.abs(waypoint.col - col) <= 2 && Math.abs(waypoint.row - row) <= 2
+        if (mouseButton === 2 || nearOld) waypoint = null   // right-click, or clicking the pin again, removes it
+        else waypoint = { col, row }
+        sfx('click')
+    }
     else if (id.startsWith('codex-entry-')) codexIndex = Number(id.slice(12))
     else if (id.startsWith('codex-tab-')) {
         codexTab = id.slice(10) === 'kush' ? 'kush' : 'world'
@@ -1131,14 +1151,17 @@ addEventListener('keydown', (e) => {
         const wasOpen = inventoryOpen
         closeWindows()
         inventoryOpen = !wasOpen
+        if (inventoryOpen) tutorialDid('inventory')
     } else if (key === 'm') {
         const wasOpen = mapOpen
         closeWindows()
         mapOpen = !wasOpen
+        if (mapOpen) tutorialDid('map')
     } else if (key === 'c') {
         const wasOpen = codexOpen
         closeWindows()
         codexOpen = !wasOpen
+        if (codexOpen) tutorialDid('map')
     } else if (codexOpen && (key === 'arrowup' || key === 'arrowdown')) {
         const step = key === 'arrowup' ? -1 : 1
         const count = codexEntries().length
@@ -1239,6 +1262,7 @@ function update() {
 
     // Remember which way we face and whether we're walking (for the art)
     player.moving = dx !== 0 || dy !== 0
+    if (player.moving) tutorialDid('move')
     if (dx < 0) player.facing = 'left'
     else if (dx > 0) player.facing = 'right'
     else if (dy < 0) player.facing = 'up'
@@ -1255,6 +1279,17 @@ function update() {
     // Makes sure the player cannot go outside the boundaries
     player.x = Math.max(0, Math.min(MAP_W * TILE - player.size, player.x))
     player.y = Math.max(0, Math.min(MAP_H * TILE - player.size, player.y))
+
+    // Reached your waypoint? Then it disappears
+    if (waypoint) {
+        const dx = waypoint.col * TILE + TILE / 2 - (player.x + player.size / 2)
+        const dy = waypoint.row * TILE + TILE / 2 - (player.y + player.size / 2)
+        if (Math.hypot(dx, dy) < TILE * 1.5) {
+            waypoint = null
+            notify('You reached your waypoint.')
+            sfx('pickup')
+        }
+    }
 }
 
 // --- Camera ----------------------------------------------------------------
@@ -1326,13 +1361,13 @@ function draw() {
 
     // Items lying on the ground
     for (const item of worldItems) {
-        drawItem(ctx, item.col * TILE, item.row * TILE, item.color, time)
+        drawItem(ctx, item.col * TILE, item.row * TILE, item.color, time, item.id)
     }
 
     // Items you dropped
     for (const d of drops) {
         const def = itemDefs.find(i => i.id === d.id)
-        if (def) drawItem(ctx, d.col * TILE, d.row * TILE, def.color, time)
+        if (def) drawItem(ctx, d.col * TILE, d.row * TILE, def.color, time, d.id)
     }
 
     // Treasure chests
@@ -1377,6 +1412,9 @@ function draw() {
         drawAnimal(ctx, a.x, a.y, a.def.kind, a.facing, a.moving, time)
     }
 
+    // Your waypoint: a column of light
+    if (waypoint) drawWaypointBeacon(ctx, waypoint.col * TILE, waypoint.row * TILE, time)
+
     // Draws the player (the look comes from the character designer)
     drawPerson(ctx, player.x, player.y, player.size, appearance, player.facing, player.moving, time)
 
@@ -1392,6 +1430,14 @@ function draw() {
     ctx.restore()
 
     // From here on we draw on the screen itself (not shifted by the camera)
+
+    // An arrow at the edge of the screen pointing to your waypoint when you can't see it
+    if (waypoint && screen === 'playing') {
+        const dx = waypoint.col * TILE + TILE / 2 - (player.x + player.size / 2)
+        const dy = waypoint.row * TILE + TILE / 2 - (player.y + player.size / 2)
+        const onScreen = Math.abs(dx) < w / 2 - 40 && Math.abs(dy) < h / 2 - 40
+        if (!onScreen) drawWaypointArrow(ctx, w, h, dx, dy, Math.round(Math.hypot(dx, dy) / TILE))
+    }
     if (screen === 'title') {
         drawTitleScreen(ctx, w, h, time, menuItems(), Math.min(menuIndex, menuItems().length - 1))
         if (settingsOpen) drawPauseMenu(ctx, w, h, settingsItems(), settingsIndex, 'Settings are kept in this browser', 'SETTINGS')
@@ -1419,13 +1465,18 @@ function draw() {
     const active = quests.find(q => stateOf(q.id) === 'active')
     const done = quests.filter(q => stateOf(q.id) === 'done').length
     // (the styling is in art.ts)
-    drawQuestPanel(
+    const questBottom = drawQuestPanel(
         ctx,
         done,
         quests.length,
         active ? active.title : null,
         active ? active.goal : done === quests.length ? 'All quests complete! Finish building the capital.' : 'Talk to a villager with a gold !, or gather materials to build Meroë.',
     )
+
+    // The tutorial box, under the quest panel
+    if (settings.tutorial && tutorialStep < TUTORIAL.length) {
+        drawTutorial(ctx, questBottom, tutorialStep + 1, TUTORIAL.length, TUTORIAL[tutorialStep].text, time)
+    }
 
     // The "ENTERING ..." banner
     if (bannerRegion && time - bannerStartedAt < 3400) {
@@ -1455,7 +1506,7 @@ function draw() {
     }
 
     if (mapOpen) {
-        drawQuestMap(ctx, w, h, rows, questMarkers(), toTile(player.x + player.size / 2), toTile(player.y + player.size / 2), player.facing, time)
+        drawQuestMap(ctx, w, h, rows, questMarkers(), toTile(player.x + player.size / 2), toTile(player.y + player.size / 2), player.facing, regions, waypoint, time)
     }
 
     if (codexOpen) {
@@ -1476,7 +1527,7 @@ function draw() {
         const rows: CraftRow[] = recipes.filter(r => r.station === panelUi!.id).map(r => ({
             id: r.id,
             name: r.name,
-            inputs: r.inputs.map(i => ({ name: nameOf(i.id), color: colorOf(i.id), have: countIn(inventory, i.id), need: i.count })),
+            inputs: r.inputs.map(i => ({ id: i.id, name: nameOf(i.id), color: colorOf(i.id), have: countIn(inventory, i.id), need: i.count })),
             output: viewOne({ id: r.output.id, count: r.output.count })!,
             forCapital: buildingDefs.some(b => b.cost.some(c => c.id === r.output.id)),
             canCraft: r.inputs.every(i => hasItem(i.id, i.count)),
@@ -1629,6 +1680,7 @@ const settings = {
     sfx: true,
     autosave: true,          // false: nothing is saved unless you choose Save Game
     factsEveryTime: false,   // true: show an item's fact every time you pick it up
+    tutorial: true,          // show the tutorial steps
 }
 try {
     Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}'))
@@ -1667,6 +1719,7 @@ function settingsItems(): MenuItem[] {
             detail: settings.autosave ? 'The game saves itself every few seconds' : 'Only saves when you choose Save Game',
         },
         { id: 'set-facts', label: 'ITEM FACTS: ' + (settings.factsEveryTime ? 'EVERY TIME' : 'FIRST TIME ONLY') },
+        { id: 'set-tutorial', label: 'TUTORIAL: ' + onOff(settings.tutorial) },
         {
             id: 'set-delete',
             label: confirmDelete ? 'DELETE? CLICK AGAIN' : 'DELETE SAVED GAME',
@@ -1688,6 +1741,9 @@ function useSettings(id: string) {
         settings.autosave = !settings.autosave
     } else if (id === 'set-facts') {
         settings.factsEveryTime = !settings.factsEveryTime
+    } else if (id === 'set-tutorial') {
+        settings.tutorial = !settings.tutorial
+        if (settings.tutorial && tutorialStep >= TUTORIAL.length) tutorialStep = 0   // turned back on: start again
     } else if (id === 'set-delete') {
         if (!savedGame) return
         if (!confirmDelete) {
@@ -1706,6 +1762,27 @@ function useSettings(id: string) {
     }
     confirmDelete = false
     saveSettings()
+}
+
+// --- Tutorial --------------------------------------------------------------
+// A short checklist for new players. Each step moves on when you actually do the thing.
+type TutorialEvent = 'move' | 'quest' | 'pickup' | 'inventory' | 'craft' | 'plot' | 'map'
+const TUTORIAL: { event: TutorialEvent; text: string }[] = [
+    { event: 'move', text: 'Welcome to Meroë! Walk around with WASD or the arrow keys. Hold Shift to run.' },
+    { event: 'quest', text: 'Villagers with a gold ! over their heads have a quest for you. Walk up to one (Mustafa is in the village) and press E to talk.' },
+    { event: 'pickup', text: 'Materials lie on the ground all over the land. Walk up to one and press E to pick it up. Your quest says where to look.' },
+    { event: 'inventory', text: 'Press I to open your inventory and see what you are carrying.' },
+    { event: 'craft', text: 'The workshops in the village turn materials into building parts. Stand next to the stoneworks (east of the village) with sandstone and press E, then click CRAFT.' },
+    { event: 'plot', text: 'The capital is built on the big paved plaza east of the village. Walk up to one of the gold outlines and press E to see what it needs.' },
+    { event: 'map', text: 'Press M for the map (gold diamonds show where quests lead) and C for the Codex. Build all 7 buildings to restore Meroë!' },
+]
+let tutorialStep = 0   // TUTORIAL.length means it is finished
+
+function tutorialDid(event: TutorialEvent) {
+    if (!settings.tutorial || tutorialStep >= TUTORIAL.length || TUTORIAL[tutorialStep].event !== event) return
+    tutorialStep++
+    sfx('codex')
+    if (tutorialStep === TUTORIAL.length) notify('Tutorial complete. Good luck, builder of Meroë!')
 }
 
 // --- Saving ----------------------------------------------------------------
@@ -1732,6 +1809,8 @@ interface SaveData {
     animals: string[]
     ending: boolean
     seen?: string[]   // items picked up before (older saves do not have this)
+    tutorial?: number
+    waypoint?: { col: number; row: number } | null
 }
 
 let gameStarted = false   // true once you are playing (a new game or a loaded one)
@@ -1771,6 +1850,8 @@ function saveGame() {
         animals: [...seenAnimals],
         ending: endingShown,
         seen: [...seenItems],
+        tutorial: tutorialStep,
+        waypoint,
     }
     try {
         localStorage.setItem(SAVE_KEY, JSON.stringify(data))
@@ -1821,6 +1902,8 @@ function loadGame(d: SaveData) {
     endingShown = d.ending
     seenItems.clear()
     ;(d.seen ?? []).forEach(id => seenItems.add(id))
+    waypoint = d.waypoint ?? null
+    tutorialStep = d.tutorial ?? TUTORIAL.length   // (an old save has already been played: skip the tutorial)
 }
 
 function autoSave() {

@@ -1020,7 +1020,7 @@ export function drawQuestPanel(
     total: number,
     title: string | null,
     text: string,
-) {
+): number {
     const x = 16
     const y = 16
     const w = 340
@@ -1093,6 +1093,52 @@ export function drawQuestPanel(
     }
 
     ctx.restore()
+    return y + h   // the bottom of the panel
+}
+
+// The tutorial box under the quest panel: one step at a time
+export function drawTutorial(ctx: CanvasRenderingContext2D, top: number, step: number, total: number, text: string, time: number) {
+    const x = 16
+    const y = top + 12
+    const w = 340
+    ctx.save()
+    ctx.font = `600 17px ${FONT_BODY}`
+    const lines = wrapText(ctx, text, w - 32)
+    const h = 38 + lines.length * 21 + 26
+
+    // a soft gold glow that pulses, so you notice a new step
+    const glow = 0.35 + Math.sin(time / 350) * 0.25
+    ctx.fillStyle = 'rgba(32, 22, 10, 0.94)'
+    ctx.beginPath()
+    ctx.roundRect(x, y, w, h, 8)
+    ctx.fill()
+    ctx.strokeStyle = `rgba(246, 220, 130, ${0.5 + glow})`
+    ctx.lineWidth = 2
+    ctx.stroke()
+
+    ctx.textBaseline = 'middle'
+    ctx.textAlign = 'left'
+    ctx.font = `700 13px ${FONT_TITLE}`
+    ctx.fillStyle = '#f6dc82'
+    ctx.fillText('TUTORIAL', x + 16, y + 17)
+    ctx.textAlign = 'right'
+    ctx.fillStyle = '#c9b98a'
+    ctx.fillText(`STEP ${step} OF ${total}`, x + w - 16, y + 17)
+    // progress bar
+    ctx.fillStyle = 'rgba(201, 162, 39, 0.25)'
+    ctx.fillRect(x + 16, y + 30, w - 32, 3)
+    ctx.fillStyle = '#e8c75a'
+    ctx.fillRect(x + 16, y + 30, (w - 32) * ((step - 1) / total), 3)
+
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'alphabetic'
+    ctx.font = `600 17px ${FONT_BODY}`
+    ctx.fillStyle = '#f3ead6'
+    lines.forEach((l, i) => ctx.fillText(l, x + 16, y + 54 + i * 21))
+    ctx.font = `600 13px ${FONT_BODY}`
+    ctx.fillStyle = '#9a8a6a'
+    ctx.fillText('You can turn the tutorial off in Settings (Esc).', x + 16, y + h - 10)
+    ctx.restore()
 }
 
 
@@ -1147,38 +1193,378 @@ export function drawMarker(ctx: CanvasRenderingContext2D, symbol: string, cx: nu
     ctx.restore()
 }
 
-// An item lying on the ground. (x, y) is the top-left corner of its tile.
-export function drawItem(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, time: number) {
+// Makes a "#rrggbb" color lighter (amount > 0) or darker (amount < 0)
+function shade(color: string, amount: number): string {
+    const n = parseInt(color.slice(1), 16)
+    const ch = (v: number) => Math.max(0, Math.min(255, Math.round(v + amount * 255)))
+    const r = ch((n >> 16) & 255)
+    const g = ch((n >> 8) & 255)
+    const b = ch(n & 255)
+    return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')
+}
+
+// Draws an item: on the ground, in a slot, or stuck to the mouse. Every item has its own picture
+// (picked by its id); anything without one is drawn as a plain lump in its color.
+export function drawItem(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, time: number, id = '') {
     const bob = Math.sin(time / 300 + x) * 2
 
     // shadow
     ctx.fillStyle = 'rgba(0, 0, 0, 0.2)'
     ctx.beginPath()
-    ctx.ellipse(x + 16, y + 27, 8, 3, 0, 0, Math.PI * 2)
+    ctx.ellipse(x + 16, y + 27, 9, 3, 0, 0, Math.PI * 2)
     ctx.fill()
 
-    // a lumpy rock / nugget shape
-    ctx.fillStyle = color
-    ctx.beginPath()
-    ctx.moveTo(x + 8, y + 24 + bob)
-    ctx.lineTo(x + 11, y + 15 + bob)
-    ctx.lineTo(x + 19, y + 12 + bob)
-    ctx.lineTo(x + 25, y + 19 + bob)
-    ctx.lineTo(x + 23, y + 25 + bob)
-    ctx.closePath()
-    ctx.fill()
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)'
-    ctx.lineWidth = 1
-    ctx.stroke()
+    ctx.save()
+    ctx.translate(x, y + bob)   // from here on, (0, 0) is the top-left of the 32x32 item square
+    const dark = shade(color, -0.22)
+    const light = shade(color, 0.22)
+    const rect = (rx: number, ry: number, rw: number, rh: number, c: string) => {
+        ctx.fillStyle = c
+        ctx.fillRect(rx, ry, rw, rh)
+    }
+    const circle = (cx: number, cy: number, r: number, c: string) => {
+        ctx.fillStyle = c
+        ctx.beginPath()
+        ctx.arc(cx, cy, r, 0, Math.PI * 2)
+        ctx.fill()
+    }
+    const oval = (cx: number, cy: number, rx: number, ry: number, rot: number, c: string) => {
+        ctx.fillStyle = c
+        ctx.beginPath()
+        ctx.ellipse(cx, cy, rx, ry, rot, 0, Math.PI * 2)
+        ctx.fill()
+    }
+    const shape = (points: number[], c: string) => {
+        ctx.fillStyle = c
+        ctx.beginPath()
+        ctx.moveTo(points[0], points[1])
+        for (let i = 2; i < points.length; i += 2) ctx.lineTo(points[i], points[i + 1])
+        ctx.closePath()
+        ctx.fill()
+    }
+    const line = (points: number[], c: string, width: number) => {
+        ctx.strokeStyle = c
+        ctx.lineWidth = width
+        ctx.lineCap = 'round'
+        ctx.beginPath()
+        ctx.moveTo(points[0], points[1])
+        for (let i = 2; i < points.length; i += 2) ctx.lineTo(points[i], points[i + 1])
+        ctx.stroke()
+    }
+    // a stone block seen from a little above: top, front and side
+    const block = (bx: number, by: number, bw: number, bh: number, c: string) => {
+        shape([bx, by + 4, bx + 4, by, bx + bw + 4, by, bx + bw, by + 4], shade(c, 0.18))
+        rect(bx, by + 4, bw, bh, c)
+        shape([bx + bw, by + 4, bx + bw + 4, by, bx + bw + 4, by + bh, bx + bw, by + bh + 4], shade(c, -0.2))
+    }
+    // a string of beads along a curve
+    const beads = (c1: string, c2: string) => {
+        for (let i = 0; i < 9; i++) {
+            const a = Math.PI * (0.1 + i * 0.1)
+            circle(16 + Math.cos(a) * 10, 9 + Math.sin(a) * 12, 2.6, i % 2 ? c1 : c2)
+        }
+    }
+    // a gold coin with something on it
+    const coin = (c: string) => {
+        circle(16, 18, 9, shade(c, -0.25))
+        circle(16, 17, 9, c)
+        circle(16, 17, 6.5, shade(c, 0.12))
+        ctx.strokeStyle = shade(c, -0.3)
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.arc(16, 17, 7.5, 0, Math.PI * 2)
+        ctx.stroke()
+    }
 
-    // shine
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.45)'
-    ctx.fillRect(x + 14, y + 16 + bob, 4, 2)
+    switch (id) {
+        // ---- resources ----
+        case 'iron-ore':
+            shape([7, 24, 9, 14, 16, 10, 24, 13, 26, 22, 20, 26], color)
+            shape([16, 10, 24, 13, 26, 22, 18, 18], dark)
+            for (const [sx, sy] of [[11, 18], [15, 22], [20, 15], [13, 14]]) rect(sx, sy, 2.5, 2.5, '#a0522d')   // rusty specks
+            break
+        case 'gold-nugget':
+            oval(16, 19, 9, 6.5, -0.2, dark)
+            oval(15, 18, 8, 6, -0.2, color)
+            oval(12, 16, 3, 2, -0.3, '#fff6c8')
+            break
+        case 'sandstone':
+            block(7, 12, 16, 11, color)
+            line([7, 20, 23, 20], dark, 1)                     // layers in the stone
+            line([7, 24, 23, 24], dark, 1)
+            break
+        case 'cut-block':
+            block(5, 16, 11, 8, color)
+            block(15, 16, 11, 8, color)
+            block(10, 8, 11, 8, light)
+            break
+        case 'granite':
+            block(7, 12, 16, 12, color)
+            for (const [sx, sy, c] of [[10, 18, '#3a3a3a'], [15, 21, '#f0f0f0'], [19, 17, '#3a3a3a'], [12, 23, '#f0f0f0'], [20, 23, '#5a5a5a']] as [number, number, string][]) rect(sx, sy, 2, 2, c)
+            break
+        case 'mud-brick':
+            block(6, 15, 19, 8, color)
+            for (const [sx, sy] of [[9, 21], [14, 23], [19, 20], [11, 25]]) rect(sx, sy, 3, 1, '#e0c070')   // bits of straw
+            break
+        case 'clay':
+            oval(16, 20, 10, 6, 0, dark)
+            oval(16, 18, 9, 6, 0, color)
+            oval(18, 17, 3, 2, 0, dark)                          // a thumb print
+            oval(11, 16, 2.5, 1.2, -0.4, 'rgba(255, 255, 255, 0.35)')
+            break
+        case 'wood':
+        case 'ebony': {
+            rect(6, 13, 18, 10, color)                           // the log
+            rect(6, 13, 18, 2, light)
+            circle(24, 18, 5, light)                             // the cut end, with rings
+            ctx.strokeStyle = dark
+            ctx.lineWidth = 1
+            ctx.beginPath()
+            ctx.arc(24, 18, 3, 0, Math.PI * 2)
+            ctx.stroke()
+            circle(24, 18, 1, dark)
+            break
+        }
+        case 'ivory':
+            line([7, 25, 10, 15, 17, 9, 25, 8], dark, 6)
+            line([7, 24, 10, 14, 17, 8, 25, 7], color, 4.5)
+            break
+        case 'iron-bar':
+            shape([6, 24, 9, 15, 24, 15, 27, 24], color)
+            shape([9, 15, 24, 15, 22, 13, 11, 13], light)
+            rect(11, 19, 10, 1.5, 'rgba(255, 255, 255, 0.35)')
+            break
+        case 'gold-leaf':
+            shape([6, 20, 18, 15, 26, 19, 14, 24], dark)
+            shape([7, 16, 19, 11, 26, 15, 14, 20], color)
+            line([10, 16, 18, 13], '#fff6c8', 1)
+            break
+        case 'incense':
+            circle(12, 21, 4, color)
+            circle(19, 22, 3.5, dark)
+            circle(16, 17, 3.5, light)
+            line([16, 12, 14, 8, 17, 5, 15, 2], 'rgba(220, 220, 220, 0.6)', 1.5)   // a wisp of smoke
+            break
+
+        // ---- treasures from other lands ----
+        case 'scarab':
+            line([9, 14, 23, 24], '#1c1410', 1.5)                // legs
+            line([23, 14, 9, 24], '#1c1410', 1.5)
+            line([8, 19, 24, 19], '#1c1410', 1.5)
+            oval(16, 20, 6, 7, 0, color)
+            circle(16, 11, 3.5, dark)
+            line([16, 14, 16, 26], dark, 1)
+            break
+        case 'assyrian-sword':
+            shape([9, 22, 22, 7, 25, 8, 11, 24], color)          // blade
+            line([10, 21, 12, 23], '#fff', 1)
+            line([6, 20, 13, 27], '#6b4226', 3)                  // guard
+            line([8, 25, 5, 28], '#3a2a1a', 3)                   // grip
+            break
+        case 'persian-daric':
+            coin(color)
+            rect(14, 12, 2.5, 9, shade(color, -0.35))            // the archer king
+            line([18, 12, 20, 17, 18, 22], shade(color, -0.35), 1.5)
+            break
+        case 'aksum-coin':
+            coin(color)
+            circle(16, 17, 2, shade(color, -0.35))               // the disc and crescent of early Aksum
+            ctx.strokeStyle = shade(color, -0.35)
+            ctx.lineWidth = 1.5
+            ctx.beginPath()
+            ctx.arc(16, 15, 4.5, 0.2 * Math.PI, 0.8 * Math.PI)
+            ctx.stroke()
+            break
+        case 'greek-amphora':
+            oval(16, 17, 6, 8, 0, color)
+            rect(14, 5, 4, 6, color)
+            shape([13, 24, 19, 24, 17, 28, 15, 28], color)
+            line([13, 7, 10, 10, 12, 13], color, 1.5)
+            line([19, 7, 22, 10, 20, 13], color, 1.5)
+            rect(10, 15, 12, 2, '#1c1410')
+            break
+        case 'augustus-head':
+            rect(13, 21, 7, 6, dark)                             // neck
+            circle(16, 15, 7.5, color)
+            rect(9, 8, 14, 4, dark)                              // hair
+            rect(19, 14, 2, 1.5, '#f3ead6')                      // eye
+            break
+
+        // ---- things from chests ----
+        case 'cowrie':
+            oval(16, 18, 9, 6, -0.3, shade(color, -0.12))
+            oval(15, 17, 8, 5.5, -0.3, color)
+            line([9, 21, 22, 14], '#8a6a4a', 1.5)
+            break
+        case 'faience-beads':
+        case 'glass-beads':
+            beads(color, light)
+            break
+        case 'ostrich-feathers':
+            for (const [a, c] of [[-0.4, '#d8d0c0'], [0, color], [0.4, '#d8d0c0']] as [number, string][]) {
+                ctx.save()
+                ctx.translate(16, 26)
+                ctx.rotate(a)
+                oval(0, -10, 4, 10, 0, c)
+                rect(-0.5, -18, 1, 18, '#8a8070')
+                ctx.restore()
+            }
+            break
+        case 'leopard-skin':
+            shape([6, 12, 12, 9, 20, 9, 26, 12, 24, 20, 26, 26, 18, 24, 14, 24, 6, 26, 8, 20], color)
+            for (const [sx, sy] of [[11, 14], [17, 13], [21, 17], [13, 19], [18, 21], [10, 22]]) circle(sx, sy, 1.5, '#3a2210')
+            break
+        case 'sorghum':
+            line([16, 28, 16, 12], '#6b8a3a', 2)
+            line([16, 20, 11, 16], '#7a9a4a', 1.5)
+            for (let i = 0; i < 9; i++) circle(13 + (i % 3) * 3, 6 + Math.floor(i / 3) * 3, 1.8, i % 2 ? color : dark)
+            break
+        case 'dates':
+            line([16, 6, 16, 11], '#6b8a3a', 1.5)
+            for (const [sx, sy] of [[12, 15], [16, 13], [20, 15], [14, 20], [18, 20], [16, 25]]) oval(sx, sy, 2.5, 3.5, 0, (sx + sy) % 2 ? color : dark)
+            break
+        case 'copper-bracelet':
+            ctx.strokeStyle = dark
+            ctx.lineWidth = 4
+            ctx.beginPath()
+            ctx.ellipse(16, 19, 9, 5, 0, 0, Math.PI * 2)
+            ctx.stroke()
+            ctx.strokeStyle = color
+            ctx.lineWidth = 2.5
+            ctx.beginPath()
+            ctx.ellipse(16, 18, 9, 5, 0, 0, Math.PI * 2)
+            ctx.stroke()
+            break
+
+        // ---- relics of Kush ----
+        case 'kerma-beaker':
+            shape([9, 7, 23, 7, 19, 26, 13, 26], color)          // red body
+            shape([9, 7, 23, 7, 22, 12, 10, 12], '#1a110a')       // shiny black top
+            line([11, 9, 13, 9], 'rgba(255, 255, 255, 0.5)', 1)
+            break
+        case 'taharqa-shabti':
+            ctx.fillStyle = color
+            ctx.beginPath()
+            ctx.roundRect(11, 5, 10, 22, [5, 5, 2, 2])
+            ctx.fill()
+            rect(12, 9, 8, 4, '#8a5a3b')                         // face
+            rect(11, 15, 10, 1.5, dark)                          // crossed arms
+            for (let i = 0; i < 3; i++) rect(13, 18 + i * 3, 6, 1, dark)   // a line of writing
+            break
+        case 'kandake-ring':
+            ctx.strokeStyle = color
+            ctx.lineWidth = 3.5
+            ctx.beginPath()
+            ctx.arc(16, 19, 7, 0, Math.PI * 2)
+            ctx.stroke()
+            circle(16, 11, 4, '#b02a3a')                         // the gem
+            circle(15, 10, 1.2, '#ffb0b8')
+            break
+        case 'meroitic-tablet':
+            ctx.fillStyle = color
+            ctx.beginPath()
+            ctx.roundRect(8, 6, 16, 21, [8, 8, 1, 1])
+            ctx.fill()
+            for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) rect(11 + c * 4, 11 + r * 4, (r + c) % 2 ? 2 : 3, 2, dark)
+            break
+        case 'lion-amulet':
+            circle(16, 17, 9, dark)                              // mane
+            circle(16, 18, 6, color)                             // face
+            rect(13, 16, 2, 2, '#1c1410')
+            rect(17, 16, 2, 2, '#1c1410')
+            shape([15, 20, 17, 20, 16, 22], '#1c1410')
+            line([16, 4, 16, 8], '#c9a227', 1.5)                 // the loop for the string
+            break
+
+        // ---- things you craft ----
+        case 'gold-collar':
+            for (const [r, c] of [[12, color], [9.5, '#3aa6c4'], [7, color]] as [number, string][]) {
+                ctx.strokeStyle = c
+                ctx.lineWidth = 2.5
+                ctx.beginPath()
+                ctx.arc(16, 8, r, 0.15 * Math.PI, 0.85 * Math.PI)
+                ctx.stroke()
+            }
+            break
+        case 'bead-necklace':
+            beads(color, '#e8d4a2')
+            oval(16, 24, 3, 4, 0, '#f1e3cf')                     // a cowrie shell in the middle
+            break
+        case 'copper-mirror':
+            line([16, 18, 16, 28], '#6b4226', 3)
+            circle(16, 12, 8, dark)
+            circle(16, 12, 6.5, color)
+            oval(13, 10, 2, 3, -0.5, 'rgba(255, 255, 255, 0.5)')
+            break
+        case 'iron-spear':
+            line([6, 27, 21, 10], '#8a5a2b', 2.5)
+            shape([19, 12, 26, 5, 23, 14], color)
+            break
+        case 'iron-hoe':
+            line([8, 27, 20, 9], '#8a5a2b', 2.5)
+            shape([18, 9, 27, 13, 25, 17, 19, 12], color)
+            break
+        case 'lion-statue':
+            rect(6, 18, 20, 7, color)                            // body lying down
+            circle(23, 15, 5, dark)                              // mane
+            circle(24, 16, 3, color)                             // face
+            rect(5, 15, 2, 6, dark)                              // tail
+            rect(6, 25, 20, 2, dark)                             // base
+            break
+        case 'offering-table':
+            block(7, 12, 16, 9, color)
+            shape([13, 25, 17, 25, 16, 29, 14, 29], color)       // the spout
+            ctx.strokeStyle = dark
+            ctx.lineWidth = 1
+            ctx.strokeRect(10, 15, 10, 6)
+            break
+        case 'feather-fan':
+            line([16, 28, 16, 16], '#8a5a2b', 2)
+            for (let i = -2; i <= 2; i++) {
+                ctx.save()
+                ctx.translate(16, 16)
+                ctx.rotate(i * 0.38)
+                oval(0, -7, 3, 7, 0, i % 2 ? '#d8d0c0' : color)
+                ctx.restore()
+            }
+            break
+        case 'leopard-cloak':
+            shape([10, 7, 22, 7, 26, 26, 6, 26], color)
+            rect(12, 6, 8, 2, '#6b4226')                         // the tie at the neck
+            for (const [sx, sy] of [[11, 13], [17, 12], [21, 17], [13, 20], [19, 22], [9, 23]]) circle(sx, sy, 1.4, '#3a2210')
+            break
+        case 'sorghum-bread':
+            oval(16, 19, 10, 6, 0, dark)
+            oval(16, 17, 10, 6, 0, color)
+            line([11, 15, 13, 19], dark, 1)
+            line([15, 14, 17, 19], dark, 1)
+            line([19, 15, 21, 19], dark, 1)
+            break
+        case 'date-cakes':
+            for (let i = 0; i < 3; i++) {
+                oval(16, 24 - i * 5, 9, 3.5, 0, dark)
+                oval(16, 23 - i * 5, 9, 3.5, 0, color)
+            }
+            break
+        case 'black-pot':
+            circle(16, 19, 9, color)
+            oval(16, 11, 7, 3, 0, '#1a110a')                     // the shiny black rim
+            rect(9, 10, 14, 3, '#1a110a')
+            oval(12, 17, 2, 3, -0.4, 'rgba(255, 255, 255, 0.25)')
+            break
+
+        default: {
+            // anything else: a lumpy rock in the item's color
+            shape([8, 24, 11, 15, 19, 12, 25, 19, 23, 25], color)
+            rect(14, 16, 4, 2, 'rgba(255, 255, 255, 0.45)')
+        }
+    }
+    ctx.restore()
 
     // twinkling sparkle so you notice it
     const s = (Math.sin(time / 200 + x * 0.3) + 1) / 2
     ctx.fillStyle = `rgba(255, 255, 255, ${0.4 + 0.6 * s})`
-    diamond(ctx, x + 24, y + 11 + bob, 2 + s * 2)
+    diamond(ctx, x + 25, y + 8 + bob, 2 + s * 2)
 }
 
 // ---------------------------------------------------------------------------
@@ -1711,7 +2097,7 @@ function drawSlot(ctx: CanvasRenderingContext2D, x: number, y: number, size: num
     if (slot) {
         // (passing -ix * 300 as the time cancels the bobbing, so items sit still in their slots)
         const ix = x + (size - TILE) / 2
-        drawItem(ctx, ix, y + (size - TILE) / 2, slot.color, -ix * 300)
+        drawItem(ctx, ix, y + (size - TILE) / 2, slot.color, -ix * 300, slot.id)
         if (slot.count > 1) {
             ctx.font = `700 14px ${FONT_TITLE}`
             ctx.textAlign = 'right'
@@ -2343,6 +2729,7 @@ export function drawFurnaceScreen(
 
 // One ingredient in a recipe, with how many you have
 export interface CraftPart {
+    id: string
     name: string
     color: string
     have: number
@@ -2430,7 +2817,7 @@ export function drawCraftScreen(ctx: CanvasRenderingContext2D, w: number, h: num
             ctx.save()
             ctx.translate(cx - 4, chipY - 11)
             ctx.scale(0.65, 0.65)
-            drawItem(ctx, 0, 0, part.color, -(cx * 300))   // (a fixed "time", so it does not bob)
+            drawItem(ctx, 0, 0, part.color, -(cx * 300), part.id)   // (a fixed "time", so it does not bob)
             ctx.restore()
             ctx.font = `600 16px ${FONT_BODY}`
             const ok = part.have >= part.need
@@ -2838,7 +3225,7 @@ export function drawHotbar(ctx: CanvasRenderingContext2D, w: number, h: number, 
 export function drawHeld(ctx: CanvasRenderingContext2D, slot: Slot) {
     ctx.save()
     const ix = pointer.x - TILE / 2
-    drawItem(ctx, ix, pointer.y - TILE / 2, slot.color, -ix * 300)
+    drawItem(ctx, ix, pointer.y - TILE / 2, slot.color, -ix * 300, slot.id)
     if (slot.count > 1) {
         ctx.font = `700 14px ${FONT_TITLE}`
         ctx.textAlign = 'right'
@@ -2957,6 +3344,9 @@ const MAP_COLORS: Record<string, string> = {
 // The land of the map overlay is painted once into a hidden canvas (there are thousands of tiles)
 let mapCache: { rows: string[]; ts: number; canvas: HTMLCanvasElement } | null = null
 
+// Where the map was last drawn, so main.ts can turn a click into a tile
+export const mapView = { ox: 0, oy: 0, ts: 1 }
+
 export function drawQuestMap(
     ctx: CanvasRenderingContext2D,
     w: number,
@@ -2966,6 +3356,8 @@ export function drawQuestMap(
     playerCol: number,
     playerRow: number,
     facing: Facing,
+    regions: { name: string; col0: number; col1: number; row0: number; row1: number }[],
+    waypoint: { col: number; row: number } | null,
     time: number,
 ) {
     ctx.save()
@@ -2978,6 +3370,9 @@ export function drawQuestMap(
     const mh = mapRows.length * ts
     const ox = Math.round((w - mw) / 2)
     const oy = Math.round((h - mh) / 2) + 6
+    mapView.ox = ox
+    mapView.oy = oy
+    mapView.ts = ts
 
     // frame
     ctx.fillStyle = 'rgba(26, 17, 10, 0.97)'
@@ -3017,6 +3412,26 @@ export function drawQuestMap(
         mapCache = { rows: mapRows, ts, canvas }
     }
     ctx.drawImage(mapCache.canvas, ox, oy)
+
+    addButton('map', ox, oy, mw, mh)   // click anywhere on the land to set a waypoint
+
+    // the names of the lands, near the top of each one
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    for (const r of regions) {
+        const name = r.name.toUpperCase()
+        const areaW = (r.col1 - r.col0 + 1) * ts
+        const size = Math.max(10, Math.min(20, Math.floor(areaW / (name.length * 0.85))))
+        ctx.font = `700 ${size}px ${FONT_TITLE}`
+        const lx = ox + ((r.col0 + r.col1 + 1) / 2) * ts
+        const ly = oy + r.row0 * ts + size + 4
+        ctx.lineWidth = 4
+        ctx.lineJoin = 'round'
+        ctx.strokeStyle = 'rgba(26, 17, 10, 0.85)'
+        ctx.strokeText(name, lx, ly)
+        ctx.fillStyle = 'rgba(255, 238, 190, 0.95)'
+        ctx.fillText(name, lx, ly)
+    }
 
     // villagers: a dot and a name
     for (const m of markers) {
@@ -3058,6 +3473,26 @@ export function drawQuestMap(
         ctx.closePath()
         ctx.fill()
         ctx.stroke()
+    }
+
+    // your waypoint: a gold pin
+    if (waypoint) {
+        const wx = ox + waypoint.col * ts + ts / 2
+        const wy = oy + waypoint.row * ts + ts / 2
+        const bob = Math.sin(time / 250) * 2
+        ctx.fillStyle = '#e8c75a'
+        ctx.strokeStyle = '#1a110a'
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.moveTo(wx, wy + bob)                          // the point of the pin
+        ctx.arc(wx, wy - 14 + bob, 7, Math.PI * 0.75, Math.PI * 0.25)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+        ctx.fillStyle = '#1a110a'
+        ctx.beginPath()
+        ctx.arc(wx, wy - 14 + bob, 2.5, 0, Math.PI * 2)
+        ctx.fill()
     }
 
     // you: a navigation arrow pointing the way you face, with a pulsing glow under it
@@ -3109,7 +3544,7 @@ export function drawQuestMap(
     ctx.textAlign = 'right'
     ctx.font = `700 12px ${FONT_TITLE}`
     ctx.fillStyle = '#c9b98a'
-    ctx.fillText('PRESS M TO CLOSE', ox + mw, ly)
+    ctx.fillText('CLICK: WAYPOINT    M: CLOSE', ox + mw, ly)
     ctx.restore()
 }
 
@@ -3357,4 +3792,49 @@ export function drawRegionBanner(ctx: CanvasRenderingContext2D, w: number, title
     ctx.fillStyle = '#f3ead6'
     ctx.fillText(subtitle, w / 2, by + 67)
     ctx.restore()
+}
+
+// A column of gold light standing on your waypoint (drawn in the world)
+export function drawWaypointBeacon(ctx: CanvasRenderingContext2D, x: number, y: number, time: number) {
+    const glow = 0.35 + Math.sin(time / 300) * 0.15
+    const grad = ctx.createLinearGradient(0, y - 160, 0, y + 16)
+    grad.addColorStop(0, 'rgba(232, 199, 90, 0)')
+    grad.addColorStop(1, `rgba(232, 199, 90, ${glow})`)
+    ctx.fillStyle = grad
+    ctx.fillRect(x + 8, y - 160, 16, 176)
+    ctx.fillStyle = '#e8c75a'
+    diamond(ctx, x + 16, y + 16, 6)
+}
+
+// An arrow at the edge of the screen pointing to the waypoint when it is off screen.
+// (dx, dy) is the direction to the waypoint, `tiles` is how far away it is.
+export function drawWaypointArrow(ctx: CanvasRenderingContext2D, w: number, h: number, dx: number, dy: number, tiles: number) {
+    const angle = Math.atan2(dy, dx)
+    // push the arrow out from the middle until it reaches the edge (with a margin)
+    const margin = 50
+    const scale = Math.min((w / 2 - margin) / Math.abs(Math.cos(angle) || 0.001), (h / 2 - margin) / Math.abs(Math.sin(angle) || 0.001))
+    const ax = w / 2 + Math.cos(angle) * scale
+    const ay = h / 2 + Math.sin(angle) * scale
+    ctx.save()
+    ctx.translate(ax, ay)
+    ctx.rotate(angle)
+    ctx.fillStyle = '#e8c75a'
+    ctx.strokeStyle = '#1a110a'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(16, 0)
+    ctx.lineTo(-10, -12)
+    ctx.lineTo(-4, 0)
+    ctx.lineTo(-10, 12)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    ctx.restore()
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `700 13px ${FONT_TITLE}`
+    ctx.fillStyle = '#1a110a'
+    ctx.fillText(tiles + 'm', ax + 1, ay + 23)
+    ctx.fillStyle = '#f6dc82'
+    ctx.fillText(tiles + 'm', ax, ay + 22)
 }
