@@ -1,7 +1,7 @@
 /******************************************************************************
  * File:        main.ts
  * Author:      Kieran Provost
- * Date:        10-26-26 (Last edit)
+ * Date:        10-28-26 (Last edit)
  * Description: The backend and rendering for the Rise of Meroe.
  * 
  * License:     MIT
@@ -10,28 +10,38 @@
 
 // All the tile and character drawing lives in art.ts
 // (TILE, the size of one square in pixels, is defined there)
-import type { BuildLine, CodexEntry, CraftRow, DesignerRow, MenuItem, Facing, Hair, MapMarker, Outfit, Slot } from './art.ts'
+import type { BuildLine, CodexEntry, CraftRow, DesignerRow, Facing, Hair, MapMarker, MenuItem, Outfit, Slot } from './art.ts'
 import {
     CHEST_SIZE, CLOTH_COLORS, HAIRS, HOTBAR_SLOTS, OUTFITS, PACK_SIZE, PLAYER_SKINS, TILE,
-    buttonAt, clearButtons, drawAnimal, drawChest, drawBuildScreen, drawBuilding, drawCapitalProgress, drawChestScreen, drawCodex, drawCraftScreen, drawDesigner, drawDialogue, drawEnding, drawFurnaceScreen, drawHeld, drawHotbar, drawHowToPlay, drawPauseMenu, drawPlotOutline, drawStation,
-    drawInventory, drawItem, drawMarker, drawNameTag, drawNotice, drawPerson, drawQuestMap, drawQuestPanel,
-    drawRegionBanner, drawStamina, drawTileArt, drawTitleScreen, drawTooltip, pointer, skinFor, windowLayout,
+    buttonAt, clearButtons, drawAnimal,
+    drawBuildScreen, drawBuilding, drawCapitalProgress,
+    drawChest,
+    drawChestScreen, drawCodex, drawCraftScreen, drawDesigner, drawDialogue, drawEnding, drawFurnaceScreen, drawHeld, drawHotbar, drawHowToPlay,
+    drawInventory, drawItem, drawMarker, drawNameTag, drawNotice,
+    drawPauseMenu,
+    drawPerson,
+    drawPlotOutline,
+    drawQuestMap, drawQuestPanel,
+    drawRegionBanner, drawStamina,
+    drawStation,
+    drawTileArt, drawTitleScreen, drawTooltip, pointer, skinFor, windowLayout,
 } from './art.ts'
 import type { Held, Slots, Stack } from './inventory.ts'
 import { MAX_STACK, addTo, countIn, leftClick, makeSlots, removeFrom, rightClick, shiftClick, takeOne } from './inventory.ts'
 // Importing our items and quests
+import type { AnimalDef } from './animals.ts'
+import { animalDefs } from './animals.ts'
+import { buildingDefs } from './buildings.ts'
+import { setMusic, setSfx, sfx, unlockAudio } from './audio.ts'
 import type { ChestDef } from './chests.ts'
 import { chestDefs, lootTable } from './chests.ts'
 import { civs } from './civs.ts'
-import { buildingDefs } from './buildings.ts'
-import type { AnimalDef } from './animals.ts'
-import { animalDefs } from './animals.ts'
-import { FURNACE_BAR, FURNACE_FUEL, FURNACE_ORE, SMELT_MS, recipes, stationNames } from './recipes.ts'
-import { BLOCK_CHARS, REGIONS, blockInfo, buildWorld, isSolidChar } from './worldgen.ts'
 import type { ItemDef } from './items.ts'
 import { itemDefs } from './items.ts'
 import type { Quest } from './quests.ts'
 import { quests } from './quests.ts'
+import { FURNACE_BAR, FURNACE_FUEL, FURNACE_ORE, SMELT_MS, recipes, stationNames } from './recipes.ts'
+import { BLOCK_CHARS, REGIONS, blockInfo, buildWorld, isSolidChar } from './worldgen.ts'
 
 // Fonts for the dialogue box (bundled with the game, so no internet needed)
 import '@fontsource/cinzel/latin-700.css'
@@ -352,6 +362,7 @@ function checkDiscoveries() {
             discovered.add(civId)
             const civ = civs.find(c => c.id === civId)
             if (civ) notify('New Codex entry unlocked: ' + civ.name + '. Press C to read it.')
+            sfx('codex')
         }
     }
 }
@@ -547,11 +558,20 @@ function burst(col: number, row: number, color: string) {
 let playStartedAt = -99999
 
 // Pick an item up off the ground
+// Items you have picked up at least once (the first time shows the item's fact)
+const seenItems = new Set<string>()
+
 function pickUp(item: ItemDef) {
     burst(item.col, item.row, item.color)
     addItem(item.id)
     worldItems.splice(worldItems.indexOf(item), 1)
-    startDialogue(speakerNamed(`Found: ${item.name}`), [item.fact])
+    sfx('pickup')
+    if (settings.factsEveryTime || !seenItems.has(item.id)) {
+        seenItems.add(item.id)
+        startDialogue(speakerNamed(`Found: ${item.name}`), [item.fact])
+    } else {
+        notify('+1 ' + item.name)
+    }
 }
 
 // Roll what a chest holds: the items it always has, plus a few random extras
@@ -574,6 +594,7 @@ function openChest(chest: ChestDef) {
     }
     openedChests.add(chest.id)
     burst(chest.col, chest.row, '#e8c75a')
+    sfx('open')
     chestUi = { chest }
 }
 
@@ -587,6 +608,8 @@ function nearbyDrop(): Drop | undefined {
 function pickUpDrop(d: Drop) {
     drops.splice(drops.indexOf(d), 1)
     addItem(d.id, d.count)   // (if it does not all fit, the rest is dropped again)
+    sfx('pickup')
+    notify('+' + d.count + ' ' + nameOf(d.id))
 }
 
 // What a stack looks like on screen (its name, color and fact come from items.ts)
@@ -711,6 +734,7 @@ function finishTalking(npc: Npc) {
         for (const r of q.reward ?? []) addItem(r.id, r.count) // and get the reward
         if (q.reward) notify('Reward: ' + q.reward.map(r => r.count + ' ' + nameOf(r.id)).join(', '))
         questState.set(q.id, 'done') // completed
+        sfx('quest')
         // reuse the dialogue box to show the fact
         talkingTo = speakerNamed('Did you know?')
         currentLines = [q.fact]
@@ -750,6 +774,7 @@ function nearbyPlot() {
 }
 
 function openStation(name: string) {
+    sfx('open')
     if (name === 'furnace') chestUi = { chest: FURNACE_CHEST, furnace: true }
     else panelUi = { kind: 'craft', id: name }
 }
@@ -776,6 +801,7 @@ function tickFurnace() {
         furnaceSlots[2] = { id: FURNACE_BAR, count: (bar?.count ?? 0) + 1 }
         const f = at('furnace')
         burst(f.col, f.row, '#ff9a3c')
+        if (chestUi?.furnace) sfx('smelt')   // (only heard while the furnace window is open)
     }
 }
 
@@ -791,6 +817,7 @@ function craftRecipe(id: string) {
     for (const i of r.inputs) removeItem(i.id, i.count)
     addItem(r.output.id, r.output.count)
     notify('Crafted ' + r.output.count + ' ' + nameOf(r.output.id))
+    sfx('craft')
     if (!craftedBefore.has(r.id)) {
         craftedBefore.add(r.id)
         startDialogue(speakerNamed('Did you know?'), [r.fact])
@@ -824,6 +851,7 @@ function constructBuilding() {
     if (!plot || built.has(plot.def.id) || !plot.def.cost.every(c => hasItem(c.id, c.count))) return
     for (const c of plot.def.cost) removeItem(c.id, c.count)
     built.set(plot.def.id, performance.now())
+    sfx('build')
     unstick()   // if you were standing on (or at the edge of) the plot, step out of it
     // items you dropped on the plot are pushed out to just below it
     for (const d of drops) {
@@ -979,6 +1007,10 @@ addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()))
 
 // What happens when a button is clicked. The ids come from the draw functions in art.ts.
 function onButton(id: string, mouseButton: number, shift: boolean) {
+    if (settingsOpen) {
+        if (id.startsWith('set-')) useSettings(id)
+        return
+    }
     if (screen === 'title') {
         if (id.startsWith('menu-')) useMenu(id)
         return
@@ -1029,6 +1061,16 @@ function onButton(id: string, mouseButton: number, shift: boolean) {
 addEventListener('keydown', (e) => {
     if (e.repeat) return
     const key = e.key.toLowerCase()
+    unlockAudio()
+
+    if (settingsOpen) {
+        const items = settingsItems()
+        if (key === 'escape') settingsOpen = false
+        else if (key === 'arrowup' || key === 'w') settingsIndex = (settingsIndex + items.length - 1) % items.length
+        else if (key === 'arrowdown' || key === 's') settingsIndex = (settingsIndex + 1) % items.length
+        else if (key === 'enter') useSettings(items[settingsIndex].id)
+        return
+    }
 
     if (screen === 'title') {
         const items = menuItems()
@@ -1126,6 +1168,7 @@ canvas.addEventListener('contextmenu', (e) => e.preventDefault())
 
 canvas.addEventListener('mousedown', (e) => {
     setPointer(e)
+    unlockAudio()
     const id = buttonAt(pointer.x, pointer.y)
     if (id === null) {
         // clicking outside a window while carrying something drops it, like in Minecraft
@@ -1351,6 +1394,7 @@ function draw() {
     // From here on we draw on the screen itself (not shifted by the camera)
     if (screen === 'title') {
         drawTitleScreen(ctx, w, h, time, menuItems(), Math.min(menuIndex, menuItems().length - 1))
+        if (settingsOpen) drawPauseMenu(ctx, w, h, settingsItems(), settingsIndex, 'Settings are kept in this browser', 'SETTINGS')
         return
     }
     if (screen === 'howto') {
@@ -1411,7 +1455,7 @@ function draw() {
     }
 
     if (mapOpen) {
-        drawQuestMap(ctx, w, h, rows, questMarkers(), toTile(player.x + player.size / 2), toTile(player.y + player.size / 2), time)
+        drawQuestMap(ctx, w, h, rows, questMarkers(), toTile(player.x + player.size / 2), toTile(player.y + player.size / 2), player.facing, time)
     }
 
     if (codexOpen) {
@@ -1457,7 +1501,9 @@ function draw() {
 
     if (pauseOpen) {
         const ago = lastSavedAt > 0 ? Math.round((time - lastSavedAt) / 1000) : -1
-        drawPauseMenu(ctx, w, h, pauseItems(), pauseIndex, ago < 0 ? 'Not saved yet' : 'Last saved ' + ago + ' seconds ago')
+        const savedText = !settings.autosave ? 'Auto-save is off' : ago < 0 ? 'Not saved yet' : 'Last saved ' + ago + ' seconds ago'
+        drawPauseMenu(ctx, w, h, pauseItems(), pauseIndex, savedText)
+        if (settingsOpen) drawPauseMenu(ctx, w, h, settingsItems(), settingsIndex, 'Settings are kept in this browser', 'SETTINGS')
     }
 
     // The short message at the top (new Codex entries and so on)
@@ -1575,6 +1621,93 @@ function scatterWorld() {
 
 let endingShown = false   // the ending screen is only shown once
 
+// --- Settings --------------------------------------------------------------
+// Kept in the browser on their own, so they stay even when auto-save is off
+const SETTINGS_KEY = 'rise-of-meroe-settings-1'
+const settings = {
+    music: true,
+    sfx: true,
+    autosave: true,          // false: nothing is saved unless you choose Save Game
+    factsEveryTime: false,   // true: show an item's fact every time you pick it up
+}
+try {
+    Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}'))
+} catch {
+    // no storage: use the defaults
+}
+setMusic(settings.music)
+setSfx(settings.sfx)
+
+function saveSettings() {
+    try {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
+    } catch {
+        // no storage
+    }
+}
+
+let settingsOpen = false
+let settingsIndex = 0
+let confirmDelete = false   // Delete Saved Game was clicked once and now asks "are you sure?"
+
+function openSettings() {
+    settingsOpen = true
+    settingsIndex = 0
+    confirmDelete = false
+}
+
+function settingsItems(): MenuItem[] {
+    const onOff = (on: boolean) => (on ? 'ON' : 'OFF')
+    return [
+        { id: 'set-music', label: 'MUSIC: ' + onOff(settings.music) },
+        { id: 'set-sfx', label: 'SOUND EFFECTS: ' + onOff(settings.sfx) },
+        {
+            id: 'set-autosave',
+            label: 'AUTO-SAVE: ' + onOff(settings.autosave),
+            detail: settings.autosave ? 'The game saves itself every few seconds' : 'Only saves when you choose Save Game',
+        },
+        { id: 'set-facts', label: 'ITEM FACTS: ' + (settings.factsEveryTime ? 'EVERY TIME' : 'FIRST TIME ONLY') },
+        {
+            id: 'set-delete',
+            label: confirmDelete ? 'DELETE? CLICK AGAIN' : 'DELETE SAVED GAME',
+            detail: savedGame ? 'Removes the save from this browser' : 'There is no saved game',
+        },
+        { id: 'set-back', label: 'BACK' },
+    ]
+}
+
+function useSettings(id: string) {
+    sfx('click')
+    if (id === 'set-music') {
+        settings.music = !settings.music
+        setMusic(settings.music)
+    } else if (id === 'set-sfx') {
+        settings.sfx = !settings.sfx
+        setSfx(settings.sfx)
+    } else if (id === 'set-autosave') {
+        settings.autosave = !settings.autosave
+    } else if (id === 'set-facts') {
+        settings.factsEveryTime = !settings.factsEveryTime
+    } else if (id === 'set-delete') {
+        if (!savedGame) return
+        if (!confirmDelete) {
+            confirmDelete = true
+            return
+        }
+        try {
+            localStorage.removeItem(SAVE_KEY)
+        } catch {
+            // no storage
+        }
+        savedGame = null
+        notify('Saved game deleted.')
+    } else if (id === 'set-back') {
+        settingsOpen = false
+    }
+    confirmDelete = false
+    saveSettings()
+}
+
 // --- Saving ----------------------------------------------------------------
 // The game saves itself in the browser (localStorage) every few seconds, and when you leave the page.
 const SAVE_KEY = 'rise-of-meroe-save-1'
@@ -1598,6 +1731,7 @@ interface SaveData {
     crafted: string[]
     animals: string[]
     ending: boolean
+    seen?: string[]   // items picked up before (older saves do not have this)
 }
 
 let gameStarted = false   // true once you are playing (a new game or a loaded one)
@@ -1636,6 +1770,7 @@ function saveGame() {
         crafted: [...craftedBefore],
         animals: [...seenAnimals],
         ending: endingShown,
+        seen: [...seenItems],
     }
     try {
         localStorage.setItem(SAVE_KEY, JSON.stringify(data))
@@ -1684,10 +1819,15 @@ function loadGame(d: SaveData) {
     seenAnimals.clear()
     d.animals.forEach(k => seenAnimals.add(k))
     endingShown = d.ending
+    seenItems.clear()
+    ;(d.seen ?? []).forEach(id => seenItems.add(id))
 }
 
-setInterval(saveGame, 10000)
-addEventListener('beforeunload', saveGame)
+function autoSave() {
+    if (settings.autosave) saveGame()
+}
+setInterval(autoSave, 10000)
+addEventListener('beforeunload', autoSave)
 
 // --- Main menu and pause menu ----------------------------------------------
 let menuIndex = 0          // which button is selected with the keyboard
@@ -1710,6 +1850,7 @@ function menuItems(): MenuItem[] {
         detail: confirmNew ? 'Your saved game will be deleted' : undefined,
     })
     items.push({ id: 'menu-howto', label: 'HOW TO PLAY' })
+    items.push({ id: 'menu-settings', label: 'SETTINGS' })
     return items
 }
 
@@ -1718,10 +1859,15 @@ function startPlaying() {
     screen = 'playing'
     gameStarted = true
     playStartedAt = performance.now()
-    saveGame()
+    autoSave()
 }
 
 function useMenu(id: string) {
+    sfx('click')
+    if (id === 'menu-settings') {
+        openSettings()
+        return
+    }
     if (id === 'menu-continue') {
         if (!gameStarted && savedGame) loadGame(savedGame)
         startPlaying()
@@ -1738,7 +1884,7 @@ function useMenu(id: string) {
             } catch {
                 // (no storage: the reload just shows the menu again)
             }
-            removeEventListener('beforeunload', saveGame)
+            removeEventListener('beforeunload', autoSave)
             location.reload()
             return
         }
@@ -1766,17 +1912,20 @@ function pauseItems(): MenuItem[] {
     return [
         { id: 'pause-resume', label: 'RESUME' },
         { id: 'pause-save', label: 'SAVE GAME' },
-        { id: 'pause-quit', label: 'SAVE AND RETURN TO MENU' },
+        { id: 'pause-settings', label: 'SETTINGS' },
+        { id: 'pause-quit', label: settings.autosave ? 'SAVE AND RETURN TO MENU' : 'RETURN TO MENU' },
     ]
 }
 
 function usePause(id: string) {
-    if (id === 'pause-resume') pauseOpen = false
+    sfx('click')
+    if (id === 'pause-settings') openSettings()
+    else if (id === 'pause-resume') pauseOpen = false
     else if (id === 'pause-save') {
         saveGame()
         notify('Game saved.')
     } else if (id === 'pause-quit') {
-        saveGame()
+        autoSave()
         pauseOpen = false
         closeWindows()
         talkingTo = null

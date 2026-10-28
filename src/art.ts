@@ -1287,13 +1287,18 @@ export function drawTitleScreen(ctx: CanvasRenderingContext2D, w: number, h: num
 }
 
 // The pause menu (Esc while playing)
-export function drawPauseMenu(ctx: CanvasRenderingContext2D, w: number, h: number, items: MenuItem[], selected: number, savedText: string) {
+export function drawPauseMenu(ctx: CanvasRenderingContext2D, w: number, h: number, items: MenuItem[], selected: number, savedText: string, title = 'PAUSED') {
     ctx.save()
-    const pw = Math.min(440, w - 40)
-    const ph = 130 + items.length * 60
-    const { py } = drawCenterPanel(ctx, w, h, pw, ph, 'PAUSED')
+    const pw = Math.min(500, w - 40)
+    const heightOf = (item: MenuItem) => (item.detail ? 58 : 48)
+    const ph = 130 + items.reduce((t, item) => t + heightOf(item) + 12, 0) - 12
+    const { py } = drawCenterPanel(ctx, w, h, pw, ph, title)
     addButton('panel', (w - pw) / 2, py, pw, ph)
-    items.forEach((item, i) => drawMenuButton(ctx, item, w / 2, py + 70 + i * 60, pw - 80, 48, i === selected))
+    let by = py + 70
+    items.forEach((item, i) => {
+        drawMenuButton(ctx, item, w / 2, by, pw - 80, heightOf(item), i === selected)
+        by += heightOf(item) + 12
+    })
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.font = `600 15px ${FONT_BODY}`
@@ -2960,6 +2965,7 @@ export function drawQuestMap(
     markers: MapMarker[],
     playerCol: number,
     playerRow: number,
+    facing: Facing,
     time: number,
 ) {
     ctx.save()
@@ -3054,17 +3060,32 @@ export function drawQuestMap(
         ctx.stroke()
     }
 
-    // you: a blinking white dot with a gold ring
-    if (Math.floor(time / 350) % 2 === 0) {
+    // you: a navigation arrow pointing the way you face, with a pulsing glow under it
+    {
         const mx = ox + playerCol * ts + ts / 2
         const my = oy + playerRow * ts + ts / 2
-        ctx.fillStyle = '#ffffff'
-        ctx.strokeStyle = '#c9a227'
-        ctx.lineWidth = 2
+        const s = Math.max(11, ts * 2.2)
+        const pulse = (time % 1600) / 1600
+        ctx.fillStyle = `rgba(232, 199, 90, ${0.45 * (1 - pulse)})`
         ctx.beginPath()
-        ctx.arc(mx, my, Math.max(4, ts * 0.5), 0, Math.PI * 2)
+        ctx.arc(mx, my, s * (0.8 + pulse * 1.2), 0, Math.PI * 2)
         ctx.fill()
+        const angle = { up: 0, right: Math.PI / 2, down: Math.PI, left: -Math.PI / 2 }[facing]
+        ctx.save()
+        ctx.translate(mx, my)
+        ctx.rotate(angle)
+        ctx.beginPath()
+        ctx.moveTo(0, -s)
+        ctx.lineTo(s * 0.75, s * 0.8)
+        ctx.lineTo(0, s * 0.35)
+        ctx.lineTo(-s * 0.75, s * 0.8)
+        ctx.closePath()
+        ctx.fillStyle = '#ffffff'
+        ctx.fill()
+        ctx.strokeStyle = '#1a110a'
+        ctx.lineWidth = 2
         ctx.stroke()
+        ctx.restore()
     }
 
     // legend
