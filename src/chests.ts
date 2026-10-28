@@ -29,4 +29,9 @@ export const chestDefs: ChestDef[] = [
     { id: 'chest-amphora', col: 0, row: 0, loot: ['greek-amphora'], rolls: 1, area: 'coast' },
     { id: 'chest-augustus', col: 0, row: 0, loot: ['augustus-head'], rolls: 2, area: 'meroe' },
     { id: 'chest-aksum', col: 0, row: 0, loot: ['aksum-coin'], rolls: 2, area: 'aksum' },
+    { id: 'chest-beaker', col: 0, row: 0, loot: ['kerma-beaker'], rolls: 1, area: 'kerma' },
+    { id: 'chest-shabti', col: 0, row: 0, loot: ['taharqa-shabti'], rolls: 1, area: 'napata' },
+    { id: 'chest-tablet', col: 0, row: 0, loot: ['meroitic-tablet'], rolls: 1, area: 'naqa' },
+    { id: 'chest-lion', col: 0, row: 0, loot: ['lion-amulet'], rolls: 1, area: 'naqa' },
+    { id: 'chest-ring', col: 0, row: 0, loot: ['kandake-ring'], rolls: 1, area: 'meroe' },
 ]

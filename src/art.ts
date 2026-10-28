@@ -1055,7 +1055,7 @@ export function drawQuestPanel(
     ctx.strokeStyle = '#e8c75a'
     ctx.lineWidth = 1.5
     for (let i = 0; i < total; i++) {
-        const cx = x + w - 22 - (total - 1 - i) * 18
+        const cx = x + w - 22 - (total - 1 - i) * (total > 10 ? 13 : 18)
         if (i < done) {
             diamond(ctx, cx, y + 16, 5)
         } else {
@@ -1185,30 +1185,76 @@ export function drawItem(ctx: CanvasRenderingContext2D, x: number, y: number, co
 // Full-screen screens (drawn on top of the world, after the camera is reset)
 // ---------------------------------------------------------------------------
 
-export function drawTitleScreen(ctx: CanvasRenderingContext2D, w: number, h: number, time: number) {
+// One button in a menu
+export interface MenuItem {
+    id: string
+    label: string
+    detail?: string   // a smaller line under the label
+}
+
+// A menu button: gold when selected (by keyboard) or under the mouse
+function drawMenuButton(ctx: CanvasRenderingContext2D, item: MenuItem, cx: number, y: number, bw: number, bh: number, selected: boolean) {
+    const x = cx - bw / 2
+    const on = selected || hovering(x, y, bw, bh)
+    ctx.fillStyle = on ? '#e8c75a' : 'rgba(26, 17, 10, 0.88)'
+    ctx.beginPath()
+    ctx.roundRect(x, y, bw, bh, 10)
+    ctx.fill()
+    ctx.strokeStyle = '#c9a227'
+    ctx.lineWidth = 2
+    ctx.stroke()
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `700 17px ${FONT_TITLE}`
+    ctx.fillStyle = on ? '#1a110a' : '#f3ead6'
+    ctx.fillText(item.label, cx, item.detail ? y + bh / 2 - 9 : y + bh / 2)
+    if (item.detail) {
+        ctx.font = `600 15px ${FONT_BODY}`
+        ctx.fillStyle = on ? '#4a3510' : '#c9b98a'
+        ctx.fillText(item.detail, cx, y + bh / 2 + 12)
+    }
+    addButton(item.id, x, y, bw, bh)
+}
+
+// The main menu, drawn over the slowly moving world
+export function drawTitleScreen(ctx: CanvasRenderingContext2D, w: number, h: number, time: number, items: MenuItem[], selected: number) {
     ctx.save()
-    ctx.fillStyle = 'rgba(14, 9, 5, 0.72)'
+    // darken the world, more at the edges
+    ctx.fillStyle = 'rgba(14, 9, 5, 0.62)'
     ctx.fillRect(0, 0, w, h)
+    const vignette = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.2, w / 2, h / 2, Math.max(w, h) * 0.75)
+    vignette.addColorStop(0, 'rgba(14, 9, 5, 0)')
+    vignette.addColorStop(1, 'rgba(14, 9, 5, 0.85)')
+    ctx.fillStyle = vignette
+    ctx.fillRect(0, 0, w, h)
+
+    // gold dust drifting up
+    for (let i = 0; i < 40; i++) {
+        const sx = ((i * 197.3 + time * 0.012 * (1 + (i % 3))) % (w + 40)) - 20
+        const sy = h - ((i * 131.7 + time * 0.02 * (1 + (i % 4))) % (h + 40)) + 20
+        ctx.fillStyle = `rgba(246, 220, 130, ${0.15 + (i % 5) * 0.08})`
+        ctx.fillRect(sx, sy, 2 + (i % 2), 2 + (i % 2))
+    }
 
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     const cx = w / 2
-    const cy = h / 2
-    const size = Math.max(28, Math.min(84, w * 0.075))
+    const size = Math.max(30, Math.min(84, w * 0.07))
+    const ty = Math.max(size + 20, h * 0.24)
 
     // the title, with a shadow and a gold gradient
     const title = 'THE RISE OF MEROË'
     ctx.font = `700 ${size}px ${FONT_TITLE}`
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'
-    ctx.fillText(title, cx + 3, cy - size * 0.6 + 3)
-    const grad = ctx.createLinearGradient(0, cy - size * 1.1, 0, cy - size * 0.1)
+    ctx.fillText(title, cx + 3, ty + 3)
+    const grad = ctx.createLinearGradient(0, ty - size * 0.5, 0, ty + size * 0.5)
     grad.addColorStop(0, '#f6dc82')
     grad.addColorStop(1, '#b8901f')
     ctx.fillStyle = grad
-    ctx.fillText(title, cx, cy - size * 0.6)
+    ctx.fillText(title, cx, ty)
 
     // ornament: a line, a diamond, a line
-    const oy = cy + size * 0.05
+    const oy = ty + size * 0.62
     ctx.strokeStyle = '#c9a227'
     ctx.lineWidth = 2
     ctx.beginPath()
@@ -1218,19 +1264,141 @@ export function drawTitleScreen(ctx: CanvasRenderingContext2D, w: number, h: num
     ctx.lineTo(cx + 200, oy)
     ctx.stroke()
     ctx.fillStyle = '#e8c75a'
-    diamond(ctx, cx, oy, 7 + Math.sin(time / 400) * 1.5)   // the ornament pulses gently
+    diamond(ctx, cx, oy, 7 + Math.sin(time / 400) * 1.5)
 
-    ctx.font = `600 ${Math.max(18, size * 0.32)}px ${FONT_BODY}`
+    ctx.font = `600 ${Math.max(18, size * 0.3)}px ${FONT_BODY}`
     ctx.fillStyle = '#f3ead6'
-    ctx.fillText('A journey through the Kingdom of Kush', cx, cy + size * 0.5)
+    ctx.fillText('Rebuild the capital of the Kingdom of Kush', cx, oy + 30)
 
-    // the start button (clicking it or pressing Enter both work)
-    drawPillButton(ctx, 'title-start', 'BEGIN  (OR PRESS ENTER)', cx, cy + size * 1.3, 320, 46)
+    // the menu
+    const bw = Math.min(380, w - 40)
+    let y = oy + 66
+    items.forEach((item, i) => {
+        const bh = item.detail ? 60 : 48
+        drawMenuButton(ctx, item, cx, y, bw, bh, i === selected)
+        y += bh + 12
+    })
 
-    // controls
-    ctx.font = `600 17px ${FONT_BODY}`
+    ctx.font = `600 15px ${FONT_BODY}`
     ctx.fillStyle = '#c9b98a'
-    ctx.fillText('WASD / Arrows: move      E: talk and pick up      I: inventory      M: map      C: codex', cx, h - 36)
+    ctx.fillText('UP / DOWN and ENTER, or click', cx, h - 52)
+    ctx.fillText('A social studies project about ancient Kush, by Kieran Provost', cx, h - 28)
+    ctx.restore()
+}
+
+// The pause menu (Esc while playing)
+export function drawPauseMenu(ctx: CanvasRenderingContext2D, w: number, h: number, items: MenuItem[], selected: number, savedText: string) {
+    ctx.save()
+    const pw = Math.min(440, w - 40)
+    const ph = 130 + items.length * 60
+    const { py } = drawCenterPanel(ctx, w, h, pw, ph, 'PAUSED')
+    addButton('panel', (w - pw) / 2, py, pw, ph)
+    items.forEach((item, i) => drawMenuButton(ctx, item, w / 2, py + 70 + i * 60, pw - 80, 48, i === selected))
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `600 15px ${FONT_BODY}`
+    ctx.fillStyle = '#c9b98a'
+    ctx.fillText(savedText, w / 2, py + ph - 26)
+    ctx.restore()
+}
+
+// A gold-bordered panel in the middle of the screen (used by the How to Play and ending screens)
+function drawCenterPanel(ctx: CanvasRenderingContext2D, w: number, h: number, pw: number, ph: number, title: string) {
+    ctx.fillStyle = 'rgba(14, 9, 5, 0.88)'
+    ctx.fillRect(0, 0, w, h)
+    const px = (w - pw) / 2
+    const py = (h - ph) / 2
+    ctx.fillStyle = 'rgba(26, 17, 10, 0.97)'
+    ctx.beginPath()
+    ctx.roundRect(px, py, pw, ph, 10)
+    ctx.fill()
+    ctx.strokeStyle = '#c9a227'
+    ctx.lineWidth = 3
+    ctx.stroke()
+    ctx.fillStyle = '#e8c75a'
+    for (const [cx, cy] of [[px, py], [px + pw, py], [px, py + ph], [px + pw, py + ph]]) {
+        diamond(ctx, cx, cy, 6)
+    }
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `700 24px ${FONT_TITLE}`
+    ctx.fillStyle = '#e8c75a'
+    ctx.fillText(title, w / 2, py + 38)
+    return { px, py }
+}
+
+// The How to Play screen (shown after the title screen)
+export function drawHowToPlay(ctx: CanvasRenderingContext2D, w: number, h: number) {
+    ctx.save()
+    const pw = Math.min(720, w - 40)
+    const ph = Math.min(470, h - 40)
+    const { px, py } = drawCenterPanel(ctx, w, h, pw, ph, 'HOW TO PLAY')
+
+    const lines: [string, string][] = [
+        ['WASD / ARROWS', 'Walk around. Hold SHIFT to sprint (it uses stamina).'],
+        ['E', 'Talk to villagers, pick things up, open chests, use the stations and the building plots in Meroë.'],
+        ['I', 'Inventory. Click to pick up and put down, right-click for half or one, shift-click to move, Q to drop.'],
+        ['1 - 9 / WHEEL', 'Choose a hotbar slot.'],
+        ['ESC', 'Close a window, or open the pause menu. The game also saves by itself every few seconds.'],
+        ['M', 'Map. Gold markers show where your quests lead.'],
+        ['C', 'Codex. Find relics in chests and craft goods to unlock pages about Kush and its neighbors.'],
+        ['GOAL', 'Gather materials, craft them at the stations, and build up the capital, Meroë. Quests teach you the history of Kush.'],
+    ]
+    const rowH = Math.min(52, (ph - 150) / lines.length)
+    ctx.textBaseline = 'middle'
+    lines.forEach(([key, text], i) => {
+        const y = py + 84 + i * rowH
+        ctx.textAlign = 'left'
+        ctx.font = `700 13px ${FONT_TITLE}`
+        ctx.fillStyle = '#e8c75a'
+        ctx.fillText(key, px + 28, y)
+        ctx.font = `600 18px ${FONT_BODY}`
+        ctx.fillStyle = '#f3ead6'
+        const wrapped = wrapText(ctx, text, pw - 230)
+        wrapped.forEach((l, j) => ctx.fillText(l, px + 190, y + (j - (wrapped.length - 1) / 2) * 18))
+    })
+    drawPillButton(ctx, 'howto-continue', 'CONTINUE  (OR PRESS ENTER)', w / 2, py + ph - 38, 320, 44)
+    ctx.restore()
+}
+
+// The ending screen (shown when every quest is done)
+export function drawEnding(ctx: CanvasRenderingContext2D, w: number, h: number, name: string, stats: string[], time: number) {
+    ctx.save()
+    const pw = Math.min(720, w - 40)
+    const ph = Math.min(460, h - 40)
+    const { py } = drawCenterPanel(ctx, w, h, pw, ph, 'THE RISE OF MEROË')
+
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `600 22px ${FONT_BODY}`
+    ctx.fillStyle = '#f3ead6'
+    const story = `Well done, ${name}! You gathered, crafted and built until the great city of Meroë stood again, with its temple, its pyramids, its ironworks and the palace of the Kandake. For hundreds of years it was the capital of a rich and powerful kingdom, and its pyramids, iron and gold are still remembered today.`
+    const lines = wrapText(ctx, story, pw - 80)
+    lines.forEach((l, i) => ctx.fillText(l, w / 2, py + 100 + i * 28))
+
+    ctx.font = `700 14px ${FONT_TITLE}`
+    ctx.fillStyle = '#e8c75a'
+    stats.forEach((s, i) => ctx.fillText(s.toUpperCase(), w / 2, py + 100 + lines.length * 28 + 34 + i * 24))
+
+    diamond(ctx, w / 2, py + ph - 88, 6 + Math.sin(time / 400) * 1.5)
+    drawPillButton(ctx, 'ending-continue', 'KEEP EXPLORING', w / 2, py + ph - 42, 280, 44)
+    ctx.restore()
+}
+
+// The stamina bar above the hotbar (only drawn while it is not full)
+export function drawStamina(ctx: CanvasRenderingContext2D, w: number, h: number, amount: number, tired: boolean) {
+    const bw = 180
+    const x = (w - bw) / 2
+    const y = h - 98
+    ctx.save()
+    ctx.fillStyle = 'rgba(26, 17, 10, 0.85)'
+    ctx.beginPath()
+    ctx.roundRect(x - 2, y - 2, bw + 4, 10, 4)
+    ctx.fill()
+    ctx.fillStyle = tired ? '#b5543a' : '#e8c75a'
+    ctx.beginPath()
+    ctx.roundRect(x, y, Math.max(1, bw * amount), 6, 3)
+    ctx.fill()
     ctx.restore()
 }
 
@@ -1286,7 +1454,8 @@ export function drawDesigner(
     ctx.beginPath()
     ctx.ellipse(pvx, pvy + 4, 12 * scale, 2.5 * scale, 0, 0, Math.PI * 2)
     ctx.fill()
-    const faces: Facing[] = ['down', 'right', 'up', 'left']
+    // (never the back view here: from behind the whole head is hair, which looks like a black flash)
+    const faces: Facing[] = ['down', 'right', 'down', 'left']
     ctx.save()
     ctx.scale(scale, scale)
     drawPerson(ctx, pvx / scale - 10, pvy / scale - 20, 20, look, faces[Math.floor(time / 1500) % 4], true, time)
@@ -1680,6 +1849,856 @@ export function drawChestScreen(
     ctx.restore()
 }
 
+// --- Animals ---------------------------------------------------------------
+// Draws an animal. (x, y) is its 20x20 box, like a person's; the feet stand on the bottom of the box.
+export function drawAnimal(ctx: CanvasRenderingContext2D, x: number, y: number, kind: string, facing: Facing, moving: boolean, time: number) {
+    ctx.save()
+    ctx.translate(x + 10, y + 20)   // origin = the middle of the feet
+    // shadow
+    const big = kind === 'elephant' ? 1.6 : 1
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.22)'
+    ctx.beginPath()
+    ctx.ellipse(0, 0, 12 * big, 3.5 * big, 0, 0, Math.PI * 2)
+    ctx.fill()
+    if (facing === 'left') ctx.scale(-1, 1)   // every animal is drawn facing right, and flipped for left
+    const step = moving ? Math.sin(time / 90) * 2 : 0
+    const legs = (color: string, xs: number[], top: number, len: number, wid: number) => {
+        ctx.fillStyle = color
+        xs.forEach((lx, i) => ctx.fillRect(lx, top + (i % 2 === 0 ? step : -step) * 0.5, wid, len))
+    }
+
+    if (kind === 'cattle') {
+        legs('#5a3a24', [-9, -5, 4, 8], -8, 8, 3)
+        ctx.fillStyle = '#8a5a3b'
+        ctx.fillRect(-11, -16, 22, 10)                 // body
+        ctx.fillStyle = '#f1e6d2'
+        ctx.fillRect(-4, -15, 7, 6)                    // white patch
+        ctx.fillStyle = '#8a5a3b'
+        ctx.fillRect(9, -19, 7, 7)                     // head
+        ctx.fillStyle = '#efe6cf'                      // long curved horns, like the cattle painted at Kerma
+        ctx.beginPath()
+        ctx.moveTo(10, -19)
+        ctx.quadraticCurveTo(6, -27, 9, -29)
+        ctx.lineTo(11, -28)
+        ctx.quadraticCurveTo(9, -25, 12, -19)
+        ctx.moveTo(14, -19)
+        ctx.quadraticCurveTo(19, -27, 16, -29)
+        ctx.lineTo(18, -28)
+        ctx.quadraticCurveTo(20, -24, 16, -19)
+        ctx.fill()
+        ctx.fillStyle = '#1c1410'
+        ctx.fillRect(13, -17, 1.5, 1.5)
+        ctx.fillStyle = '#5a3a24'
+        ctx.fillRect(-13, -15, 2, 7)                   // tail
+    } else if (kind === 'ostrich') {
+        legs('#c99a8a', [-3, 2], -10, 10, 2)
+        ctx.fillStyle = '#1c1410'
+        ctx.beginPath()
+        ctx.ellipse(0, -14, 9, 6, 0, 0, Math.PI * 2)   // round black body
+        ctx.fill()
+        ctx.fillStyle = '#f1ece0'
+        ctx.fillRect(-10, -16, 4, 4)                   // white tail feathers
+        ctx.fillStyle = '#c9a59a'
+        ctx.fillRect(5, -30, 2.5, 15)                  // long neck
+        ctx.fillRect(5, -32, 6, 4)                     // head
+        ctx.fillStyle = '#e0a060'
+        ctx.fillRect(11, -31, 3, 2)                    // beak
+    } else if (kind === 'gazelle') {
+        legs('#8a5f3a', [-7, -4, 4, 7], -8, 8, 1.5)
+        ctx.fillStyle = '#c8934e'
+        ctx.fillRect(-9, -15, 18, 7)                   // body
+        ctx.fillStyle = '#f3ead6'
+        ctx.fillRect(-8, -10, 16, 2)                   // white belly
+        ctx.fillStyle = '#c8934e'
+        ctx.fillRect(7, -21, 3, 8)                     // neck
+        ctx.fillRect(7, -23, 7, 4)                     // head
+        ctx.fillStyle = '#2b1a10'
+        ctx.fillRect(8, -29, 1.5, 6)                   // horns
+        ctx.fillRect(10.5, -29, 1.5, 6)
+    } else if (kind === 'elephant') {
+        legs('#6f6a66', [-14, -8, 6, 12], -10, 10, 5)
+        ctx.fillStyle = '#8a8580'
+        ctx.beginPath()
+        ctx.roundRect(-17, -30, 32, 22, 8)             // big body
+        ctx.fill()
+        ctx.beginPath()
+        ctx.roundRect(11, -33, 12, 14, 5)              // head
+        ctx.fill()
+        ctx.fillStyle = '#77726d'
+        ctx.beginPath()
+        ctx.ellipse(10, -25, 6, 9, 0, 0, Math.PI * 2)  // big ear
+        ctx.fill()
+        ctx.fillStyle = '#8a8580'
+        ctx.fillRect(20, -22, 4, 15 + step * 0.5)      // trunk
+        ctx.fillStyle = '#f3ead6'
+        ctx.fillRect(19, -21, 5, 2)                    // tusk
+        ctx.fillStyle = '#1c1410'
+        ctx.fillRect(17, -29, 2, 2)
+    } else {
+        // giraffe
+        legs('#c8963e', [-7, -3, 4, 8], -12, 12, 2)
+        ctx.fillStyle = '#e0b050'
+        ctx.fillRect(-9, -20, 19, 9)                   // body
+        ctx.save()
+        ctx.translate(8, -20)
+        ctx.rotate(-0.25)
+        ctx.fillRect(0, -20, 4, 21)                    // long neck
+        ctx.restore()
+        ctx.fillStyle = '#e0b050'
+        ctx.fillRect(10, -42, 8, 5)                    // head
+        ctx.fillStyle = '#8a5a2b'                      // spots
+        for (const [sx, sy] of [[-6, -18], [-1, -15], [4, -19], [7, -14], [11, -28], [12, -34]]) ctx.fillRect(sx, sy, 3, 3)
+        ctx.fillRect(11, -45, 1.5, 3)                  // little horns
+        ctx.fillRect(14, -45, 1.5, 3)
+        ctx.fillStyle = '#1c1410'
+        ctx.fillRect(15, -41, 1.5, 1.5)
+    }
+    ctx.restore()
+}
+
+// --- Codex pictures --------------------------------------------------------
+// A small framed picture for each Codex page. `locked` draws it as a dark silhouette.
+export function drawCodexPicture(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, id: string, locked: boolean, time: number) {
+    ctx.save()
+    ctx.beginPath()
+    ctx.roundRect(x, y, w, h, 6)
+    ctx.clip()
+
+    // sky and ground
+    const sky = ctx.createLinearGradient(0, y, 0, y + h)
+    sky.addColorStop(0, '#f2c27a')
+    sky.addColorStop(0.6, '#f7dca6')
+    ctx.fillStyle = sky
+    ctx.fillRect(x, y, w, h)
+    ctx.fillStyle = '#e8c27e'
+    ctx.fillRect(x, y + h * 0.72, w, h * 0.28)
+    ctx.fillStyle = 'rgba(255, 244, 200, 0.9)'
+    ctx.beginPath()
+    ctx.arc(x + w * 0.82, y + h * 0.22, 12, 0, Math.PI * 2)    // the sun
+    ctx.fill()
+
+    const gx = x + w / 2          // the middle of the ground line
+    const gy = y + h * 0.74
+    const sand = '#d6b57a'
+    const sandDark = '#a97f4a'
+    const tri = (cx: number, base: number, half: number, tall: number, c1: string, c2: string) => {
+        ctx.fillStyle = c1
+        ctx.beginPath()
+        ctx.moveTo(cx - half, base)
+        ctx.lineTo(cx, base - tall)
+        ctx.lineTo(cx + half, base)
+        ctx.fill()
+        ctx.fillStyle = c2
+        ctx.beginPath()
+        ctx.moveTo(cx, base - tall)
+        ctx.lineTo(cx + half, base)
+        ctx.lineTo(cx + half * 0.15, base)
+        ctx.fill()
+    }
+
+    switch (id) {
+        case 'kerma': {
+            // the Western Deffufa: a huge mud-brick temple, with a black-topped Kerma beaker in front
+            ctx.fillStyle = '#a8683f'
+            ctx.fillRect(gx - 60, gy - 52, 90, 52)
+            ctx.fillStyle = '#8a5230'
+            ctx.fillRect(gx - 60, gy - 52, 90, 6)
+            ctx.fillRect(gx - 20, gy - 70, 26, 20)
+            ctx.fillStyle = '#3a2216'
+            ctx.fillRect(gx - 22, gy - 24, 12, 24)
+            ctx.fillStyle = '#9a3a24'                                  // beaker: red body...
+            ctx.beginPath()
+            ctx.moveTo(gx + 44, gy - 34)
+            ctx.lineTo(gx + 64, gy - 34)
+            ctx.lineTo(gx + 58, gy)
+            ctx.lineTo(gx + 50, gy)
+            ctx.fill()
+            ctx.fillStyle = '#1a110a'                                  // ...and a shiny black top
+            ctx.fillRect(gx + 44, gy - 36, 20, 9)
+            break
+        }
+        case 'pharaohs': {
+            // a Kushite king's double-crown with two cobras, in front of Jebel Barkal
+            ctx.fillStyle = '#c9905a'
+            ctx.fillRect(x, gy - 46, w * 0.42, 46)
+            ctx.fillRect(x + w * 0.3, gy - 70, 14, 30)                // the pinnacle
+            ctx.fillStyle = '#1c1410'
+            ctx.beginPath()
+            ctx.roundRect(gx + 8, gy - 64, 40, 40, 12)                // a close-fitting cap crown
+            ctx.fill()
+            ctx.fillStyle = '#e8c75a'
+            ctx.fillRect(gx + 6, gy - 32, 44, 6)                      // gold band
+            ctx.fillRect(gx + 18, gy - 72, 5, 10)                     // two cobras on the front
+            ctx.fillRect(gx + 30, gy - 72, 5, 10)
+            ctx.fillStyle = '#8a5a3b'
+            ctx.fillRect(gx + 14, gy - 26, 30, 26)                    // the king's face and neck
+            ctx.fillStyle = '#1c1410'
+            ctx.fillRect(gx + 34, gy - 18, 3, 3)
+            break
+        }
+        case 'meroe': {
+            // the steep pyramids of Meroë, with a chapel at the front of each
+            tri(gx - 50, gy, 20, 64, sand, sandDark)
+            tri(gx, gy, 24, 80, sand, sandDark)
+            tri(gx + 52, gy, 18, 58, sand, sandDark)
+            ctx.fillStyle = '#b8955f'
+            for (const [cx, cw] of [[gx - 50, 14], [gx, 18], [gx + 52, 12]]) ctx.fillRect(cx - cw / 2, gy - 12, cw, 12)
+            ctx.fillStyle = '#3a2a1a'
+            for (const cx of [gx - 50, gx, gx + 52]) ctx.fillRect(cx - 2, gy - 8, 4, 8)
+            break
+        }
+        case 'kandake': {
+            // a queen in a tall crown, holding a spear
+            ctx.fillStyle = '#6b4226'
+            ctx.fillRect(gx - 3, gy - 92, 4, 92)                      // spear
+            ctx.fillStyle = '#c0c4c8'
+            ctx.beginPath()
+            ctx.moveTo(gx - 6, gy - 92)
+            ctx.lineTo(gx - 1, gy - 106)
+            ctx.lineTo(gx + 4, gy - 92)
+            ctx.fill()
+            ctx.fillStyle = '#7a2a5a'
+            ctx.beginPath()
+            ctx.moveTo(gx + 10, gy - 52)
+            ctx.lineTo(gx + 40, gy - 52)
+            ctx.lineTo(gx + 50, gy)
+            ctx.lineTo(gx, gy)
+            ctx.fill()                                                // robe
+            ctx.fillStyle = '#e8c75a'
+            ctx.fillRect(gx + 8, gy - 30, 34, 4)                      // sash
+            ctx.fillStyle = '#6b4226'
+            ctx.beginPath()
+            ctx.arc(gx + 25, gy - 62, 10, 0, Math.PI * 2)             // head
+            ctx.fill()
+            ctx.fillStyle = '#e8c75a'
+            ctx.fillRect(gx + 15, gy - 84, 20, 16)                    // crown
+            ctx.fillRect(gx + 22, gy - 92, 6, 8)
+            break
+        }
+        case 'script': {
+            // a stone tablet carved with signs
+            ctx.fillStyle = '#b8a27a'
+            ctx.beginPath()
+            ctx.roundRect(gx - 50, gy - 92, 100, 92, [30, 30, 2, 2])
+            ctx.fill()
+            ctx.fillStyle = '#6b5a3a'
+            for (let r = 0; r < 5; r++) {
+                for (let c = 0; c < 6; c++) {
+                    const sx = gx - 38 + c * 14
+                    const sy = gy - 70 + r * 14
+                    const k = (r * 7 + c * 3) % 4                       // a few different signs
+                    if (k === 0) ctx.fillRect(sx, sy, 3, 9)
+                    else if (k === 1) ctx.fillRect(sx, sy + 3, 9, 3)
+                    else if (k === 2) { ctx.beginPath(); ctx.arc(sx + 4, sy + 4, 3.5, 0, Math.PI * 2); ctx.fill() }
+                    else { ctx.fillRect(sx, sy, 3, 9); ctx.fillRect(sx, sy, 8, 3) }
+                }
+            }
+            break
+        }
+        case 'apedemak': {
+            // the lion-headed god's face
+            ctx.fillStyle = '#b8702a'
+            ctx.beginPath()
+            ctx.arc(gx, gy - 48, 42, 0, Math.PI * 2)                  // mane
+            ctx.fill()
+            ctx.fillStyle = '#e0a050'
+            ctx.beginPath()
+            ctx.arc(gx, gy - 46, 28, 0, Math.PI * 2)                  // face
+            ctx.fill()
+            ctx.fillStyle = '#1c1410'
+            ctx.fillRect(gx - 14, gy - 54, 7, 5)
+            ctx.fillRect(gx + 7, gy - 54, 7, 5)
+            ctx.beginPath()
+            ctx.moveTo(gx - 6, gy - 40)
+            ctx.lineTo(gx + 6, gy - 40)
+            ctx.lineTo(gx, gy - 33)
+            ctx.fill()
+            ctx.fillStyle = '#e8c75a'
+            ctx.fillRect(gx - 20, gy - 96, 40, 10)                    // crown
+            break
+        }
+        case 'iron': {
+            // a furnace with fire, and iron bars
+            ctx.fillStyle = '#6b4a3a'
+            ctx.beginPath()
+            ctx.moveTo(gx - 50, gy)
+            ctx.lineTo(gx - 40, gy - 70)
+            ctx.lineTo(gx - 10, gy - 70)
+            ctx.lineTo(gx, gy)
+            ctx.fill()
+            ctx.fillStyle = '#1a110a'
+            ctx.fillRect(gx - 34, gy - 22, 18, 22)
+            const f = Math.sin(time / 90) * 3
+            ctx.fillStyle = '#ff9a3c'
+            ctx.fillRect(gx - 31, gy - 16 - f, 12, 16 + f)
+            ctx.fillStyle = 'rgba(200, 200, 200, 0.5)'
+            ctx.beginPath()
+            ctx.arc(gx - 25, gy - 82 - ((time / 50) % 12), 7, 0, Math.PI * 2)
+            ctx.fill()
+            ctx.fillStyle = '#5b5f66'
+            for (let i = 0; i < 4; i++) ctx.fillRect(gx + 14 + (i % 2) * 6, gy - 8 - i * 9, 44, 7)
+            break
+        }
+        case 'egypt': {
+            tri(gx - 20, gy, 60, 70, sand, sandDark)                  // a wide Egyptian pyramid
+            ctx.fillStyle = '#c9a265'
+            ctx.fillRect(gx + 30, gy - 22, 44, 22)                    // the sphinx
+            ctx.fillRect(gx + 62, gy - 38, 16, 20)
+            ctx.fillStyle = '#2f6fb5'
+            ctx.fillRect(gx + 60, gy - 40, 20, 6)
+            break
+        }
+        case 'assyria': {
+            ctx.fillStyle = '#8a8f98'                                 // an iron sword
+            ctx.beginPath()
+            ctx.moveTo(gx - 6, gy - 20)
+            ctx.lineTo(gx, gy - 100)
+            ctx.lineTo(gx + 6, gy - 20)
+            ctx.fill()
+            ctx.fillStyle = '#6b4226'
+            ctx.fillRect(gx - 22, gy - 22, 44, 6)
+            ctx.fillRect(gx - 3, gy - 16, 6, 16)
+            break
+        }
+        case 'persia': {
+            ctx.fillStyle = '#c9a227'                                 // a gold coin with an archer
+            ctx.beginPath()
+            ctx.arc(gx, gy - 46, 40, 0, Math.PI * 2)
+            ctx.fill()
+            ctx.fillStyle = '#e8c75a'
+            ctx.beginPath()
+            ctx.arc(gx, gy - 46, 33, 0, Math.PI * 2)
+            ctx.fill()
+            ctx.strokeStyle = '#9a7a1a'
+            ctx.lineWidth = 3
+            ctx.beginPath()
+            ctx.arc(gx + 6, gy - 46, 16, -1.2, 1.2)                   // the bow
+            ctx.stroke()
+            ctx.fillStyle = '#9a7a1a'
+            ctx.fillRect(gx - 12, gy - 58, 6, 26)                     // the archer
+            break
+        }
+        case 'greece': {
+            ctx.fillStyle = '#b5654a'                                 // a wine amphora
+            ctx.beginPath()
+            ctx.ellipse(gx, gy - 44, 24, 34, 0, 0, Math.PI * 2)
+            ctx.fill()
+            ctx.fillRect(gx - 8, gy - 92, 16, 20)
+            ctx.fillRect(gx - 4, gy - 14, 8, 14)
+            ctx.strokeStyle = '#b5654a'
+            ctx.lineWidth = 5
+            ctx.beginPath()
+            ctx.arc(gx - 14, gy - 80, 8, Math.PI * 0.5, Math.PI * 1.5)
+            ctx.arc(gx + 14, gy - 80, 8, Math.PI * 1.5, Math.PI * 0.5)
+            ctx.stroke()
+            ctx.fillStyle = '#1c1410'
+            ctx.fillRect(gx - 24, gy - 50, 48, 6)
+            break
+        }
+        case 'rome': {
+            ctx.fillStyle = '#b08d57'                                 // the bronze head of Augustus
+            ctx.beginPath()
+            ctx.arc(gx, gy - 54, 28, 0, Math.PI * 2)
+            ctx.fill()
+            ctx.fillRect(gx - 12, gy - 30, 24, 30)
+            ctx.fillStyle = '#7a5a30'
+            ctx.fillRect(gx - 28, gy - 80, 56, 12)                    // hair
+            ctx.fillStyle = '#f3ead6'                                 // the glass eyes that survived
+            ctx.fillRect(gx - 14, gy - 58, 8, 5)
+            ctx.fillRect(gx + 6, gy - 58, 8, 5)
+            ctx.fillStyle = '#1c1410'
+            ctx.fillRect(gx - 11, gy - 58, 3, 4)
+            ctx.fillRect(gx + 9, gy - 58, 3, 4)
+            break
+        }
+        default: {
+            // aksum: a tall carved granite stela
+            ctx.fillStyle = '#8a8f98'
+            ctx.beginPath()
+            ctx.moveTo(gx - 16, gy)
+            ctx.lineTo(gx - 14, gy - 100)
+            ctx.arc(gx, gy - 100, 14, Math.PI, 0)
+            ctx.lineTo(gx + 16, gy)
+            ctx.fill()
+            ctx.fillStyle = '#6b7078'
+            for (let i = 0; i < 6; i++) ctx.fillRect(gx - 10, gy - 92 + i * 15, 20, 4)   // carved "floors"
+            ctx.fillRect(gx - 5, gy - 14, 10, 14)                                      // false door
+        }
+    }
+
+    if (locked) {
+        // hide the picture: a dark wash with a question mark
+        ctx.fillStyle = 'rgba(26, 17, 10, 0.86)'
+        ctx.fillRect(x, y, w, h)
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.font = `700 48px ${FONT_TITLE}`
+        ctx.fillStyle = '#6e6350'
+        ctx.fillText('?', x + w / 2, y + h / 2)
+    }
+    ctx.restore()
+
+    ctx.strokeStyle = '#c9a227'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.roundRect(x, y, w, h, 6)
+    ctx.stroke()
+}
+
+// --- Crafting, building and the stations -----------------------------------
+
+// The furnace window: ore goes in the top slot, fuel in the bottom slot, and the bar comes out the right.
+// The slots are 'slot:chest:0' (ore), 'slot:chest:1' (fuel) and 'slot:chest:2' (bar), so the chest clicking code works.
+export function drawFurnaceScreen(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    layout: WindowLayout,
+    furnace: (Slot | null)[],
+    progress: number,   // 0..1, how far the smelting has got (0 = not smelting)
+    pack: (Slot | null)[],
+    time: number,
+) {
+    ctx.save()
+    ctx.fillStyle = 'rgba(14, 9, 5, 0.75)'
+    ctx.fillRect(0, 0, w, h)
+    const { px, py, pw, ph, size } = layout
+    drawPanel(ctx, px, py, pw, ph)
+    drawCloseButton(ctx, px, py, pw)
+
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `700 20px ${FONT_TITLE}`
+    ctx.fillStyle = '#e8c75a'
+    ctx.fillText('FURNACE', w / 2, py + 32)
+
+    const top = layout.chest[0].y
+    const cx = w / 2
+    const input: SlotRect = { x: cx - size * 2.6, y: top, size }
+    const fuel: SlotRect = { x: cx - size * 2.6, y: top + size * 2, size }
+    const output: SlotRect = { x: cx + size * 1.6, y: top + size, size }
+    drawClickableSlot(ctx, input, furnace[0], 'slot:chest:0')
+    drawClickableSlot(ctx, fuel, furnace[1], 'slot:chest:1')
+    drawClickableSlot(ctx, output, furnace[2], 'slot:chest:2')
+
+    ctx.font = `700 10px ${FONT_TITLE}`
+    ctx.fillStyle = '#c9b98a'
+    ctx.fillText('IRON ORE', input.x + size / 2, input.y - 8)
+    ctx.fillText('FUEL: WOOD', fuel.x + size / 2, fuel.y + size + 10)
+    ctx.fillText('IRON BAR', output.x + size / 2, output.y - 8)
+
+    // the flame between the two input slots (it flickers while smelting)
+    const fx = input.x + size / 2
+    const fy = input.y + size * 1.5
+    const burning = progress > 0
+    const flick = burning ? Math.sin(time / 90) * 2 : 0
+    ctx.fillStyle = burning ? '#ff9a3c' : '#4a3a2a'
+    ctx.beginPath()
+    ctx.moveTo(fx, fy - 12 - flick)
+    ctx.quadraticCurveTo(fx + 10, fy + 2, fx, fy + 10)
+    ctx.quadraticCurveTo(fx - 10, fy + 2, fx, fy - 12 - flick)
+    ctx.fill()
+    if (burning) {
+        ctx.fillStyle = '#ffd36b'
+        ctx.beginPath()
+        ctx.ellipse(fx, fy + 3, 4, 6, 0, 0, Math.PI * 2)
+        ctx.fill()
+    }
+
+    // the arrow, which fills from left to right
+    const ax = input.x + size + 18
+    const aw = output.x - ax - 18
+    const ay = output.y + size / 2
+    ctx.fillStyle = '#4a3a2a'
+    ctx.fillRect(ax, ay - 6, aw, 12)
+    ctx.beginPath()
+    ctx.moveTo(ax + aw, ay - 14)
+    ctx.lineTo(ax + aw + 16, ay)
+    ctx.lineTo(ax + aw, ay + 14)
+    ctx.fill()
+    ctx.fillStyle = '#e8c75a'
+    ctx.fillRect(ax, ay - 6, aw * progress, 12)
+
+    const first = layout.main[0]
+    ctx.textAlign = 'left'
+    ctx.font = `700 12px ${FONT_TITLE}`
+    ctx.fillStyle = '#c9b98a'
+    ctx.fillText('YOUR INVENTORY', first.x, first.y - 16)
+    layout.main.forEach((r, i) => drawClickableSlot(ctx, r, pack[HOTBAR_SLOTS + i], 'slot:main:' + i))
+    layout.hotbar.forEach((r, i) => drawClickableSlot(ctx, r, pack[i], 'slot:hotbar:' + i))
+
+    ctx.textAlign = 'center'
+    ctx.font = `700 11px ${FONT_TITLE}`
+    ctx.fillStyle = '#c9b98a'
+    ctx.fillText('1 ORE + 1 WOOD = 1 IRON BAR      SHIFT CLICK: MOVE      E OR ESC: CLOSE', w / 2, py + ph - 18)
+    ctx.restore()
+}
+
+// A row in the crafting window
+export interface CraftRow {
+    id: string
+    name: string
+    cost: string        // like "2 Sandstone Block"
+    result: string      // like "1 Cut Sandstone"
+    canCraft: boolean
+}
+
+// The crafting window of a station (stoneworks, goldsmith, brickyard)
+export function drawCraftScreen(ctx: CanvasRenderingContext2D, w: number, h: number, title: string, rows: CraftRow[]) {
+    ctx.save()
+    ctx.fillStyle = 'rgba(14, 9, 5, 0.75)'
+    ctx.fillRect(0, 0, w, h)
+    const rowH = 64
+    const pw = Math.min(600, w - 40)
+    const ph = Math.min(h - 40, 130 + rows.length * rowH)
+    const px = Math.round((w - pw) / 2)
+    const py = Math.round((h - ph) / 2)
+    drawPanel(ctx, px, py, pw, ph)
+    addButton('panel', px, py, pw, ph)
+    drawCloseButton(ctx, px, py, pw)
+
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `700 22px ${FONT_TITLE}`
+    ctx.fillStyle = '#e8c75a'
+    ctx.fillText(title, w / 2, py + 34)
+
+    rows.forEach((row, i) => {
+        const y = py + 66 + i * rowH
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.05)'
+        ctx.beginPath()
+        ctx.roundRect(px + 20, y, pw - 40, rowH - 8, 6)
+        ctx.fill()
+        ctx.textAlign = 'left'
+        ctx.font = `700 14px ${FONT_TITLE}`
+        ctx.fillStyle = '#f3ead6'
+        ctx.fillText(row.name.toUpperCase(), px + 34, y + 18)
+        ctx.font = `600 17px ${FONT_BODY}`
+        ctx.fillStyle = row.canCraft ? '#c9d9a0' : '#b08a7a'
+        ctx.fillText(row.cost + '  →  ' + row.result, px + 34, y + 40)
+        const bx = px + pw - 110
+        const on = row.canCraft && hovering(bx - 40, y + 8, 80, rowH - 24)
+        ctx.fillStyle = !row.canCraft ? '#4a3a2a' : on ? '#f6dc82' : '#e8c75a'
+        ctx.beginPath()
+        ctx.roundRect(bx - 40, y + 8, 80, rowH - 24, 6)
+        ctx.fill()
+        ctx.textAlign = 'center'
+        ctx.font = `700 13px ${FONT_TITLE}`
+        ctx.fillStyle = row.canCraft ? '#1a110a' : '#8a7a62'
+        ctx.fillText('CRAFT', bx, y + rowH / 2 - 4)
+        if (row.canCraft) addButton('craft:' + row.id, bx - 40, y + 8, 80, rowH - 24)
+    })
+
+    ctx.textAlign = 'center'
+    ctx.font = `700 11px ${FONT_TITLE}`
+    ctx.fillStyle = '#c9b98a'
+    ctx.fillText('E OR ESC: CLOSE', w / 2, py + ph - 18)
+    ctx.restore()
+}
+
+export interface BuildLine {
+    name: string
+    have: number
+    need: number
+}
+
+// The window for a building plot: what it costs and a Build button
+export function drawBuildScreen(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    name: string,
+    blurb: string,
+    lines: BuildLine[],
+    canBuild: boolean,
+) {
+    ctx.save()
+    ctx.fillStyle = 'rgba(14, 9, 5, 0.75)'
+    ctx.fillRect(0, 0, w, h)
+    const pw = Math.min(560, w - 40)
+    ctx.font = `600 18px ${FONT_BODY}`
+    const blurbLines = wrapText(ctx, blurb, pw - 60)
+    const ph = Math.min(h - 30, 190 + blurbLines.length * 22 + lines.length * 28)
+    const px = Math.round((w - pw) / 2)
+    const py = Math.round((h - ph) / 2)
+    drawPanel(ctx, px, py, pw, ph)
+    addButton('panel', px, py, pw, ph)
+    drawCloseButton(ctx, px, py, pw)
+
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `700 22px ${FONT_TITLE}`
+    ctx.fillStyle = '#e8c75a'
+    ctx.fillText(name.toUpperCase(), w / 2, py + 34)
+
+    ctx.font = `600 18px ${FONT_BODY}`
+    ctx.fillStyle = '#f3ead6'
+    blurbLines.forEach((l, i) => ctx.fillText(l, w / 2, py + 72 + i * 22))
+
+    let y = py + 90 + blurbLines.length * 22
+    ctx.font = `700 12px ${FONT_TITLE}`
+    ctx.fillStyle = '#c9b98a'
+    ctx.fillText('MATERIALS NEEDED', w / 2, y)
+    y += 24
+    for (const l of lines) {
+        const ok = l.have >= l.need
+        ctx.textAlign = 'left'
+        ctx.font = `600 19px ${FONT_BODY}`
+        ctx.fillStyle = '#f3ead6'
+        ctx.fillText(l.name, px + 80, y)
+        ctx.textAlign = 'right'
+        ctx.fillStyle = ok ? '#a8d98a' : '#e08a7a'
+        ctx.fillText(Math.min(l.have, 99) + ' / ' + l.need, px + pw - 80, y)
+        y += 28
+    }
+
+    const by = py + ph - 46
+    const bx = w / 2
+    const on = canBuild && hovering(bx - 110, by - 20, 220, 40)
+    ctx.fillStyle = !canBuild ? '#4a3a2a' : on ? '#f6dc82' : '#e8c75a'
+    ctx.beginPath()
+    ctx.roundRect(bx - 110, by - 20, 220, 40, 20)
+    ctx.fill()
+    ctx.textAlign = 'center'
+    ctx.font = `700 15px ${FONT_TITLE}`
+    ctx.fillStyle = canBuild ? '#1a110a' : '#8a7a62'
+    ctx.fillText(canBuild ? 'BUILD' : 'MISSING MATERIALS', bx, by)
+    if (canBuild) addButton('build', bx - 110, by - 20, 220, 40)
+    ctx.restore()
+}
+
+// "Meroë: 3 of 7 built", top right
+export function drawCapitalProgress(ctx: CanvasRenderingContext2D, w: number, built: number, total: number) {
+    ctx.save()
+    const bw = 190
+    const x = w - bw - 16
+    const y = 16
+    ctx.fillStyle = 'rgba(26, 17, 10, 0.88)'
+    ctx.beginPath()
+    ctx.roundRect(x, y, bw, 52, 8)
+    ctx.fill()
+    ctx.strokeStyle = '#c9a227'
+    ctx.lineWidth = 2
+    ctx.stroke()
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
+    ctx.font = `700 11px ${FONT_TITLE}`
+    ctx.fillStyle = '#e8c75a'
+    ctx.fillText('THE CAPITAL OF MEROË', x + 12, y + 16)
+    for (let i = 0; i < total; i++) {
+        ctx.fillStyle = i < built ? '#e8c75a' : 'rgba(201, 162, 39, 0.25)'
+        diamond(ctx, x + 20 + i * 24, y + 36, 7)
+    }
+    ctx.restore()
+}
+
+// --- The stations in the village ---
+export function drawStation(ctx: CanvasRenderingContext2D, x: number, y: number, kind: string, time: number) {
+    ctx.save()
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.22)'
+    ctx.beginPath()
+    ctx.ellipse(x + 16, y + 28, 13, 4, 0, 0, Math.PI * 2)
+    ctx.fill()
+    if (kind === 'furnace') {
+        ctx.fillStyle = '#6b4a3a'
+        ctx.fillRect(x + 5, y + 8, 22, 20)
+        ctx.fillStyle = '#4a3226'
+        ctx.fillRect(x + 12, y - 2, 8, 12)               // chimney
+        ctx.fillStyle = '#1a110a'
+        ctx.fillRect(x + 10, y + 16, 12, 12)             // mouth
+        const flick = Math.sin(time / 90) * 2
+        ctx.fillStyle = '#ff9a3c'
+        ctx.fillRect(x + 12, y + 22 - flick, 8, 6 + flick)
+        ctx.fillStyle = 'rgba(200, 200, 200, 0.35)'      // smoke
+        ctx.beginPath()
+        ctx.arc(x + 16 + Math.sin(time / 500) * 3, y - 8 - ((time / 40) % 10), 4, 0, Math.PI * 2)
+        ctx.fill()
+    } else if (kind === 'stoneworks') {
+        ctx.fillStyle = '#d6b57a'
+        ctx.fillRect(x + 4, y + 16, 14, 12)              // stacked blocks
+        ctx.fillRect(x + 10, y + 6, 14, 10)
+        ctx.fillStyle = '#b08d57'
+        ctx.fillRect(x + 4, y + 16, 14, 2)
+        ctx.fillRect(x + 10, y + 6, 14, 2)
+        ctx.fillStyle = '#8a8f98'                        // chisel
+        ctx.fillRect(x + 22, y + 20, 7, 3)
+        ctx.fillStyle = '#6b4a3a'
+        ctx.fillRect(x + 18, y + 21, 4, 2)
+    } else if (kind === 'goldsmith') {
+        ctx.fillStyle = '#8a5a3b'
+        ctx.fillRect(x + 4, y + 14, 24, 14)              // workbench
+        ctx.fillStyle = '#6b4226'
+        ctx.fillRect(x + 4, y + 14, 24, 3)
+        ctx.fillStyle = '#e8c75a'                        // gold pieces
+        ctx.fillRect(x + 9, y + 9, 6, 5)
+        ctx.fillRect(x + 17, y + 11, 8, 3)
+        ctx.fillStyle = 'rgba(255, 246, 200, ' + (0.4 + Math.sin(time / 300) * 0.3) + ')'
+        ctx.fillRect(x + 11, y + 9, 2, 2)
+    } else {
+        // brickyard: stacks of mud bricks
+        ctx.fillStyle = '#b0764a'
+        for (let i = 0; i < 3; i++) ctx.fillRect(x + 4 + i * 8, y + 20, 7, 8)
+        for (let i = 0; i < 2; i++) ctx.fillRect(x + 8 + i * 8, y + 12, 7, 8)
+        ctx.fillStyle = '#8a5a35'
+        for (let i = 0; i < 3; i++) ctx.fillRect(x + 4 + i * 8, y + 20, 7, 2)
+        for (let i = 0; i < 2; i++) ctx.fillRect(x + 8 + i * 8, y + 12, 7, 2)
+    }
+    ctx.restore()
+}
+
+// A plot that is still empty: a gold dashed outline and its name
+export function drawPlotOutline(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, label: string, time: number) {
+    ctx.save()
+    ctx.fillStyle = 'rgba(184, 144, 31, 0.2)'
+    ctx.fillRect(x + 3, y + 3, w - 6, h - 6)
+    ctx.strokeStyle = '#a67c12'
+    ctx.lineWidth = 3
+    ctx.setLineDash([10, 7])
+    ctx.lineDashOffset = -time / 60
+    ctx.strokeRect(x + 3, y + 3, w - 6, h - 6)
+    ctx.setLineDash([])
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `700 12px ${FONT_TITLE}`
+    ctx.fillStyle = 'rgba(255, 246, 214, 0.85)'
+    ctx.fillText(label.toUpperCase(), x + w / 2 + 1, y + h / 2 + 1)
+    ctx.fillStyle = '#5a3d0a'
+    ctx.fillText(label.toUpperCase(), x + w / 2, y + h / 2)
+    ctx.restore()
+}
+
+// A finished building. (x, y, w, h) is the whole plot. `progress` 0..1 is the building animation:
+// the building rises from the ground, with scaffolding around it until it is done.
+export function drawBuilding(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, id: string, time: number, progress: number) {
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(x - 4, y + h * (1 - progress) - 4, w + 8, h * progress + 8)
+    ctx.clip()
+    const sand = '#d6b57a'
+    const sandDark = '#b08d57'
+    const mud = '#b98655'
+
+    if (id === 'houses') {
+        const n = 3
+        const cw = w / n
+        for (let i = 0; i < n; i++) {
+            const hx = x + i * cw + 6
+            const hw = cw - 12
+            const hy = y + 8 + (i % 2) * 14
+            ctx.fillStyle = mud
+            ctx.fillRect(hx, hy, hw, h * 0.5)
+            ctx.fillStyle = '#7a4a2a'
+            ctx.fillRect(hx - 3, hy - 5, hw + 6, 8)
+            ctx.fillStyle = '#2b1a10'
+            ctx.fillRect(hx + hw / 2 - 5, hy + h * 0.5 - 16, 10, 16)
+            ctx.fillStyle = '#d9a064'
+            ctx.fillRect(hx + 4, hy + 10, 6, 6)
+        }
+    } else if (id === 'ironworks') {
+        ctx.fillStyle = '#6b4a3a'
+        ctx.fillRect(x + 8, y + 14, w * 0.5, h - 24)
+        ctx.fillStyle = '#4a3226'
+        ctx.fillRect(x + 22, y - 2, 12, 20)
+        ctx.fillStyle = '#1a110a'
+        ctx.fillRect(x + 14, y + h - 40, 22, 16)
+        const f = Math.sin(time / 90) * 2
+        ctx.fillStyle = '#ff9a3c'
+        ctx.fillRect(x + 18, y + h - 34 - f, 14, 10 + f)
+        ctx.fillStyle = '#5b5f66'                         // iron bars stacked on the right
+        for (let i = 0; i < 3; i++) ctx.fillRect(x + w * 0.62, y + h - 20 - i * 7, w * 0.3, 5)
+        ctx.fillStyle = 'rgba(200, 200, 200, 0.3)'
+        ctx.beginPath()
+        ctx.arc(x + 28 + Math.sin(time / 500) * 4, y - 8 - ((time / 40) % 14), 5, 0, Math.PI * 2)
+        ctx.fill()
+    } else if (id === 'hafir') {
+        ctx.fillStyle = sandDark                           // the stone rim
+        ctx.fillRect(x + 4, y + 6, w - 8, h - 12)
+        ctx.fillStyle = '#3f8fbf'
+        ctx.fillRect(x + 14, y + 16, w - 28, h - 32)
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.28)'
+        for (let i = 0; i < 4; i++) ctx.fillRect(x + 20 + ((i * 53 + time / 25) % (w - 60)), y + 24 + i * ((h - 56) / 4), 14, 2)
+    } else if (id === 'cemetery') {
+        const spots: [number, number, number][] = [[0.28, 0.45, 0.28], [0.7, 0.4, 0.26], [0.5, 0.82, 0.3]]
+        for (const [fx, fy, fs] of spots) {
+            const px = x + w * fx
+            const py = y + h * fy
+            const s = w * fs
+            ctx.fillStyle = sand
+            ctx.beginPath()
+            ctx.moveTo(px - s, py)
+            ctx.lineTo(px, py - s * 1.7)
+            ctx.lineTo(px + s, py)
+            ctx.fill()
+            ctx.fillStyle = sandDark
+            ctx.beginPath()
+            ctx.moveTo(px, py - s * 1.7)
+            ctx.lineTo(px + s, py)
+            ctx.lineTo(px + s * 0.2, py)
+            ctx.fill()
+            ctx.fillStyle = '#6b4a30'
+            ctx.fillRect(px - 3, py - 8, 6, 8)             // small chapel door
+        }
+    } else if (id === 'temple') {
+        ctx.fillStyle = sand
+        ctx.fillRect(x + 4, y + 10, w - 8, h - 14)
+        ctx.fillStyle = sandDark
+        ctx.fillRect(x + 4, y + 10, w - 8, 8)
+        const cols = 5
+        for (let i = 0; i < cols; i++) {                   // the columns
+            const cx = x + 18 + i * ((w - 44) / (cols - 1))
+            ctx.fillStyle = '#e8d4a2'
+            ctx.fillRect(cx, y + 22, 8, h - 40)
+            ctx.fillStyle = '#c9a227'
+            ctx.fillRect(cx - 2, y + 20, 12, 4)
+        }
+        ctx.fillStyle = '#3a2a1a'
+        ctx.fillRect(x + w / 2 - 9, y + h - 36, 18, 22)    // the doorway
+        ctx.fillStyle = '#e8c75a'
+        ctx.fillRect(x + w / 2 - 12, y + 12, 24, 4)
+    } else if (id === 'baths') {
+        ctx.fillStyle = '#e8d4a2'
+        ctx.fillRect(x + 4, y + 6, w - 8, h - 12)
+        ctx.fillStyle = '#4aa8c9'
+        ctx.fillRect(x + 18, y + 20, w - 36, h - 40)
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'
+        for (let i = 0; i < 3; i++) ctx.fillRect(x + 26 + ((i * 41 + time / 30) % (w - 70)), y + 28 + i * ((h - 64) / 3), 12, 2)
+        ctx.fillStyle = sandDark
+        for (const [cx, cy] of [[x + 8, y + 8], [x + w - 16, y + 8], [x + 8, y + h - 20], [x + w - 16, y + h - 20]]) ctx.fillRect(cx, cy, 8, 12)
+    } else {
+        // the royal enclosure: a wall around a palace with a gold roof
+        ctx.fillStyle = sandDark
+        ctx.fillRect(x + 2, y + 6, w - 4, h - 10)
+        ctx.fillStyle = sand
+        ctx.fillRect(x + 8, y + 12, w - 16, h - 22)
+        ctx.fillStyle = '#e8d4a2'
+        ctx.fillRect(x + w * 0.25, y + h * 0.25, w * 0.5, h * 0.45)
+        ctx.fillStyle = '#e8c75a'
+        ctx.fillRect(x + w * 0.22, y + h * 0.2, w * 0.56, 8)
+        ctx.fillStyle = '#3a2a1a'
+        ctx.fillRect(x + w / 2 - 8, y + h * 0.5, 16, h * 0.2)
+        ctx.fillStyle = sandDark
+        for (let i = 0; i < w - 12; i += 12) ctx.fillRect(x + 6 + i, y + 2, 7, 6)   // the wall's top
+        ctx.fillStyle = '#2b1a10'
+        ctx.fillRect(x + w / 2 - 10, y + h - 20, 20, 14)                            // the gate
+    }
+    ctx.restore()
+
+    if (progress < 1) {
+        // scaffolding while it goes up
+        ctx.save()
+        ctx.strokeStyle = '#8a5a2b'
+        ctx.lineWidth = 3
+        ctx.strokeRect(x + 2, y + h * (1 - progress), w - 4, h * progress)
+        for (let i = 1; i < 4; i++) {
+            ctx.beginPath()
+            ctx.moveTo(x + (w * i) / 4, y + h * (1 - progress))
+            ctx.lineTo(x + (w * i) / 4, y + h)
+            ctx.stroke()
+        }
+        ctx.restore()
+    }
+}
+
 // The hotbar along the bottom of the screen. Keys 1-9 (or the mouse wheel) pick a slot.
 export function drawHotbar(ctx: CanvasRenderingContext2D, w: number, h: number, pack: (Slot | null)[], selected: number, age: number) {
     ctx.save()
@@ -2049,6 +3068,7 @@ export function drawChest(ctx: CanvasRenderingContext2D, x: number, y: number, o
 
 // One page of the Codex.
 export interface CodexEntry {
+    id: string
     name: string
     years: string
     relation: string
@@ -2056,103 +3076,139 @@ export interface CodexEntry {
     unlocked: boolean
 }
 
-// The Codex: a list of civilizations on the left, the selected one on the right.
-export function drawCodex(ctx: CanvasRenderingContext2D, w: number, h: number, entries: CodexEntry[], selected: number) {
+// The Codex: two tabs (Kush, and the world around it), a list on the left, and the selected page on the right
+export function drawCodex(ctx: CanvasRenderingContext2D, w: number, h: number, entries: CodexEntry[], selected: number, tab: string, time: number) {
     ctx.save()
     ctx.fillStyle = 'rgba(14, 9, 5, 0.85)'
     ctx.fillRect(0, 0, w, h)
 
-    const pw = Math.min(920, w - 40)
-    const ph = Math.min(540, h - 40)
+    const pw = Math.min(960, w - 40)
+    const ph = Math.min(560, h - 40)
     const px = (w - pw) / 2
     const py = (h - ph) / 2
-
-    ctx.fillStyle = 'rgba(26, 17, 10, 0.97)'
-    ctx.beginPath()
-    ctx.roundRect(px, py, pw, ph, 10)
-    ctx.fill()
-    ctx.strokeStyle = '#c9a227'
-    ctx.lineWidth = 3
-    ctx.stroke()
-    ctx.fillStyle = '#e8c75a'
-    for (const [cx, cy] of [[px, py], [px + pw, py], [px, py + ph], [px + pw, py + ph]]) {
-        diamond(ctx, cx, cy, 6)
-    }
-
+    drawPanel(ctx, px, py, pw, ph)
+    addButton('panel', px, py, pw, ph)
     drawCloseButton(ctx, px, py, pw)
-    const found = entries.filter(e => e.unlocked).length
+
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.font = `700 22px ${FONT_TITLE}`
     ctx.fillStyle = '#e8c75a'
-    ctx.fillText('CODEX: THE WORLD AROUND KUSH', w / 2, py + 36)
-    ctx.font = `600 16px ${FONT_BODY}`
+    ctx.fillText('CODEX', w / 2, py + 32)
+
+    // the two tabs
+    const tabs: [string, string][] = [['kush', 'THE KINGDOM OF KUSH'], ['world', 'THE WORLD AROUND KUSH']]
+    const tw = Math.min(250, (pw - 80) / 2)
+    tabs.forEach(([id, label], i) => {
+        const tx = w / 2 - tw - 6 + i * (tw + 12)
+        const ty = py + 54
+        const on = tab === id
+        ctx.fillStyle = on ? '#e8c75a' : hovering(tx, ty, tw, 30) ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.05)'
+        ctx.beginPath()
+        ctx.roundRect(tx, ty, tw, 30, 15)
+        ctx.fill()
+        ctx.strokeStyle = 'rgba(201, 162, 39, 0.6)'
+        ctx.lineWidth = 1
+        ctx.stroke()
+        ctx.font = `700 12px ${FONT_TITLE}`
+        ctx.fillStyle = on ? '#1a110a' : '#e8c75a'
+        ctx.fillText(label, tx + tw / 2, ty + 15)
+        addButton('codex-tab-' + id, tx, ty, tw, 30)
+    })
+    const found = entries.filter(e => e.unlocked).length
+    ctx.font = `600 15px ${FONT_BODY}`
     ctx.fillStyle = '#c9b98a'
-    ctx.fillText(`Civilizations discovered: ${found} of ${entries.length}`, w / 2, py + 64)
+    ctx.fillText(`Pages discovered: ${found} of ${entries.length}`, w / 2, py + 100)
 
     // the list on the left
     const listX = px + 24
-    const listW = Math.min(250, pw * 0.3)
+    const listW = Math.min(240, pw * 0.27)
+    const rowH = Math.min(46, (ph - 160) / Math.max(1, entries.length))
     entries.forEach((entry, i) => {
-        const ry = py + 92 + i * 52
+        const ry = py + 120 + i * rowH
+        const rh = rowH - 6
         const on = i === selected
-        addButton('codex-entry-' + i, listX, ry, listW, 44)
-        ctx.fillStyle = on ? 'rgba(201, 162, 39, 0.18)' : hovering(listX, ry, listW, 44) ? 'rgba(255, 255, 255, 0.09)' : 'rgba(255, 255, 255, 0.04)'
+        addButton('codex-entry-' + i, listX, ry, listW, rh)
+        ctx.fillStyle = on ? 'rgba(201, 162, 39, 0.18)' : hovering(listX, ry, listW, rh) ? 'rgba(255, 255, 255, 0.09)' : 'rgba(255, 255, 255, 0.04)'
         ctx.beginPath()
-        ctx.roundRect(listX, ry, listW, 44, 6)
+        ctx.roundRect(listX, ry, listW, rh, 6)
         ctx.fill()
         ctx.strokeStyle = on ? '#e8c75a' : 'rgba(201, 162, 39, 0.3)'
         ctx.lineWidth = on ? 2 : 1
         ctx.stroke()
         ctx.textAlign = 'left'
-        ctx.font = `700 13px ${FONT_TITLE}`
+        ctx.font = `700 12px ${FONT_TITLE}`
         ctx.fillStyle = entry.unlocked ? '#f3ead6' : '#6e6350'
-        ctx.fillText(entry.unlocked ? entry.name.toUpperCase() : '???', listX + 14, ry + 22)
+        ctx.fillText(entry.unlocked ? entry.name.toUpperCase() : '???', listX + 14, ry + rh / 2)
     })
 
-    // the page on the right
-    const pageX = listX + listW + 30
-    const pageW = px + pw - 28 - pageX
+    // the page on the right: a picture in the top right corner, the text beside and below it
+    const pageX = listX + listW + 28
+    const pageW = px + pw - 26 - pageX
     const entry = entries[selected]
     if (entry) {
+        const picW = Math.min(230, pageW * 0.42)
+        const picH = Math.round(picW * 0.72)
+        const picX = pageX + pageW - picW
+        const picY = py + 120
+        drawCodexPicture(ctx, picX, picY, picW, picH, entry.id, !entry.unlocked, time)
+        const textW = pageW - picW - 22
+
         ctx.textAlign = 'left'
+        ctx.textBaseline = 'middle'
         if (entry.unlocked) {
-            ctx.font = `700 24px ${FONT_TITLE}`
+            ctx.font = `700 22px ${FONT_TITLE}`
             ctx.fillStyle = '#e8c75a'
-            ctx.fillText(entry.name.toUpperCase(), pageX, py + 112)
-            ctx.font = `700 12px ${FONT_TITLE}`
+            const nameLines = wrapText(ctx, entry.name.toUpperCase(), textW)
+            nameLines.forEach((l, i) => ctx.fillText(l, pageX, py + 134 + i * 26))
+            const top = py + 134 + (nameLines.length - 1) * 26   // everything below moves down if the name takes 2 lines
+            ctx.font = `700 11px ${FONT_TITLE}`
             ctx.fillStyle = '#c9b98a'
-            ctx.fillText(`${entry.years.toUpperCase()}   |   ${entry.relation.toUpperCase()}`, pageX, py + 142)
+            ctx.fillText(entry.years.toUpperCase(), pageX, top + 32)
+            ctx.fillText(entry.relation.toUpperCase(), pageX, top + 50)
             ctx.strokeStyle = 'rgba(201, 162, 39, 0.5)'
             ctx.lineWidth = 1
             ctx.beginPath()
-            ctx.moveTo(pageX, py + 158)
-            ctx.lineTo(pageX + pageW, py + 158)
+            ctx.moveTo(pageX, top + 66)
+            ctx.lineTo(pageX + textW, top + 66)
             ctx.stroke()
+            // the text runs beside the picture, then uses the full width once it is below it
             ctx.textBaseline = 'alphabetic'
-            ctx.font = `600 21px ${FONT_BODY}`
+            ctx.font = `600 19px ${FONT_BODY}`
             ctx.fillStyle = '#f3ead6'
-            wrapText(ctx, entry.summary, pageW).forEach((line, i) => {
-                ctx.fillText(line, pageX, py + 192 + i * 28)
-            })
-            ctx.textBaseline = 'middle'
+            let lineY = top + 94
+            let line = ''
+            const widthAt = (yy: number) => (yy - 18 < picY + picH + 6 ? textW : pageW)
+            for (const word of entry.summary.split(' ')) {
+                const test = line ? line + ' ' + word : word
+                if (line && ctx.measureText(test).width > widthAt(lineY)) {
+                    ctx.fillText(line, pageX, lineY)
+                    lineY += 25
+                    line = word
+                } else {
+                    line = test
+                }
+            }
+            if (line) ctx.fillText(line, pageX, lineY)
         } else {
-            ctx.font = `700 24px ${FONT_TITLE}`
+            ctx.font = `700 22px ${FONT_TITLE}`
             ctx.fillStyle = '#6e6350'
-            ctx.fillText('UNDISCOVERED', pageX, py + 112)
+            ctx.fillText('UNDISCOVERED', pageX, py + 134)
             ctx.textBaseline = 'alphabetic'
-            ctx.font = `600 21px ${FONT_BODY}`
+            ctx.font = `600 19px ${FONT_BODY}`
             ctx.fillStyle = '#c9b98a'
-            wrapText(ctx, 'Find treasure chests hidden around the land. Objects from other civilizations will unlock their pages.', pageW)
-                .forEach((line, i) => ctx.fillText(line, pageX, py + 192 + i * 28))
-            ctx.textBaseline = 'middle'
+            const hint = tab === 'kush'
+                ? 'Find relics of Kush in treasure chests, or craft goods in Meroë, to unlock this page.'
+                : 'Find treasure chests hidden around the land. Objects from other civilizations will unlock their pages.'
+            wrapText(ctx, hint, textW).forEach((l, i) => ctx.fillText(l, pageX, py + 180 + i * 25))
         }
     }
 
     ctx.textAlign = 'center'
-    ctx.font = `700 12px ${FONT_TITLE}`
+    ctx.textBaseline = 'middle'
+    ctx.font = `700 11px ${FONT_TITLE}`
     ctx.fillStyle = '#c9b98a'
-    ctx.fillText('UP / DOWN: BROWSE      PRESS C TO CLOSE', w / 2, py + ph - 22)
+    ctx.fillText('UP / DOWN: BROWSE      LEFT / RIGHT: SWITCH TAB      C OR ESC: CLOSE', w / 2, py + ph - 18)
     ctx.restore()
 }
 

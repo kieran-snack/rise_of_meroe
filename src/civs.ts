@@ -13,9 +13,61 @@ export interface Civ {
     years: string
     relation: string  // how Kush and this civilization got along
     summary: string
+    group?: 'kush'    // pages about Kush itself (the others are about its neighbors)
 }
 
 export const civs: Civ[] = [
+    // ---- Kush itself ----
+    {
+        id: 'kerma', group: 'kush',
+        name: 'Kerma',
+        years: 'About 2500 to 1500 BCE',
+        relation: 'The first kingdom of Kush',
+        summary: 'The first great kingdom of Nubia grew up around the city of Kerma, near the Third Cataract of the Nile. Its people built a huge mud-brick temple, the Western Deffufa, and buried their kings under large round mounds. Kerma potters made famous thin beakers with a black top and a red body. Around 1500 BCE Egypt conquered Kerma.',
+    },
+    {
+        id: 'pharaohs', group: 'kush',
+        name: 'The Black Pharaohs',
+        years: 'About 744 to 656 BCE',
+        relation: 'Kush rules Egypt',
+        summary: 'A new Kushite kingdom grew strong at Napata, near the holy mountain Jebel Barkal. King Piye marched north and conquered Egypt, and his family ruled it as the 25th Dynasty. Taharqa, the most famous of them, built temples from Napata to Karnak and was buried in the largest pyramid at Nuri. The Assyrians later drove the Kushite kings back south.',
+    },
+    {
+        id: 'meroe', group: 'kush',
+        name: 'Meroë',
+        years: 'About 590 BCE to 350 CE',
+        relation: 'The capital of Kush',
+        summary: 'The capital of Kush moved south to Meroë, between the Nile and the Atbara River. Rain fell there, so farmers and herders could live away from the river. The city had palaces, temples, the Royal Baths and huge iron workshops, and more than 200 steep pyramids stand in the region. Meroë declined in the 300s CE, as Aksum grew strong.',
+    },
+    {
+        id: 'kandake', group: 'kush',
+        name: 'The Kandakes',
+        years: 'Ruling queens of Kush',
+        relation: 'Women in power',
+        summary: 'Kandake was the title of the queen mother, and several Kandakes ruled Kush themselves. Queen Amanirenas led the war against Rome around 25 BCE, and Queen Amanitore built temples at Naqa and Meroë. Kushite art shows queens as strong rulers. In 1834 a treasure hunter found gold jewelry in the pyramid of Queen Amanishakheto.',
+    },
+    {
+        id: 'script', group: 'kush',
+        name: 'Meroitic Writing',
+        years: 'From about 200 BCE',
+        relation: 'The language of Kush',
+        summary: 'The Kushites first wrote in Egyptian hieroglyphs, but later made their own writing for their own language. Meroitic had a picture form for monuments and a quick cursive form for everyday writing. Scholars can read the sounds of the letters today, but they still understand only a few words of the language.',
+    },
+    {
+        id: 'apedemak', group: 'kush',
+        name: 'Apedemak, the Lion God',
+        years: 'The gods of Kush',
+        relation: 'Religion',
+        summary: 'Kushites worshipped Egyptian gods such as Amun, but also gods of their own. Apedemak, a war god with the head of a lion, had temples at Naqa and Musawwarat es-Sufra. On the Lion Temple at Naqa he is shown with three lion heads and four arms, and with the body of a snake.',
+    },
+    {
+        id: 'iron', group: 'kush',
+        name: 'Iron and Trade',
+        years: 'The riches of Kush',
+        relation: 'How Kush grew rich',
+        summary: 'Meroë was a great center of iron. Smiths smelted ore in furnaces burning charcoal, and heaps of slag still lie around the city. Kush also sent gold, ivory, ebony, incense and animal skins north to Egypt and the Mediterranean, and east to the Red Sea. Trade made Kush rich and powerful.',
+    },
+    // ---- The world around Kush ----
     {
         id: 'egypt',
         name: 'Egypt',

@@ -15,20 +15,21 @@ export interface ItemDef {
     color: string
     fact: string // shown when you pick it up
     civ?: string // which outside civilization it comes from (see civs.ts)
+    spawn?: { area: string; count: number; nearWater?: boolean; gap?: number } // lies on the ground at random spots in this part of the world (see worldgen.ts)
 }
 // Items with col: -1 and row: -1 are not on the ground. They are found in chests (see chests.ts).
 
 export const itemDefs: ItemDef[] = [
     {
-        id: 'iron-ore', name: 'Iron Ore', col: -1, row: -1, color: '#5b5f66',
+        id: 'iron-ore', name: 'Iron Ore', col: -1, row: -1, spawn: { area: 'slag', count: 6, gap: 2 }, color: '#5b5f66',
         fact: 'Iron ore! Kushite smiths heated ore like this in furnaces fueled by charcoal. Meroë was so busy with ironworking that mounds of leftover slag are still there today.',
     },
     {
-        id: 'gold-nugget', name: 'Gold Nugget', col: -1, row: -1, color: '#e8c75a',
+        id: 'gold-nugget', name: 'Gold Nugget', col: -1, row: -1, spawn: { area: 'napata', count: 5 }, color: '#e8c75a',
         fact: 'Gold! Nubia, the land of Kush, was famous for its gold. Its name may even come from the old Egyptian word for gold.',
     },
     {
-        id: 'sandstone', name: 'Sandstone Block', col: -1, row: -1, color: '#c9a265',
+        id: 'sandstone', name: 'Sandstone Block', col: -1, row: -1, spawn: { area: 'meroe', count: 14 }, color: '#c9a265',
         fact: 'A block of sandstone! Meroë\'s pyramids were built from sandstone blocks, and many had a small chapel built against one side for offerings.',
     },
     {
@@ -56,24 +57,64 @@ export const itemDefs: ItemDef[] = [
         fact: 'A gold coin from Aksum, a rising kingdom in the highlands of Ethiopia. Aksum grew strong in the same centuries that Meroë faded.',
     },
     {
-        id: 'ivory', name: 'Ivory Tusk', col: -1, row: -1, color: '#efe6cf',
+        id: 'ivory', name: 'Ivory Tusk', col: -1, row: -1, spawn: { area: 'coast', count: 3 }, color: '#efe6cf',
         fact: 'Ivory! Elephant tusks were among the most valuable goods traded out of Africa. Craftsmen carved them into jewelry, boxes and furniture.',
     },
     {
-        id: 'ebony', name: 'Ebony Log', col: -1, row: -1, color: '#2b2018',
+        id: 'ebony', name: 'Ebony Log', col: -1, row: -1, spawn: { area: 'kerma', count: 3 }, color: '#2b2018',
         fact: 'Ebony is a very dark, very hard wood from Africa. Egyptians prized it for fine furniture and carvings.',
     },
     {
-        id: 'iron-bar', name: 'Iron Bar', col: -1, row: -1, color: '#6b6f75',
+        id: 'iron-bar', name: 'Iron Bar', col: -1, row: -1, color: '#6b6f75', civ: 'iron',
         fact: 'An iron bar, ready for the smith. Iron tools and weapons were stronger than bronze, which made ironworking a source of power.',
     },
     {
-        id: 'incense', name: 'Frankincense', col: -1, row: -1, color: '#d8c27a',
+        id: 'incense', name: 'Frankincense', col: -1, row: -1, spawn: { area: 'aksum', count: 3 }, color: '#d8c27a',
         fact: 'Frankincense is a sweet-smelling tree resin burned in temples. It was one of the most valuable trade goods of the ancient world.',
     },
     {
-        id: 'granite', name: 'Granite Block', col: -1, row: -1, color: '#a39e96',
+        id: 'granite', name: 'Granite Block', col: -1, row: -1, spawn: { area: 'granite-quarry', count: 4 }, color: '#a39e96',
         fact: 'Granite is an extremely hard stone. Builders in Aksum cut and raised huge granite pillars without modern machines.',
+    },
+    {
+        id: 'wood', name: 'Acacia Wood', col: -1, row: -1, color: '#8a5a2b', spawn: { area: 'napata', count: 8 },
+        fact: 'Wood and charcoal fueled the furnaces of Meroë. Smelting iron used so much fuel that the forests around the city were cut down.',
+    },
+    {
+        id: 'clay', name: 'Nile Clay', col: -1, row: -1, color: '#9a6b4a', spawn: { area: 'kerma', count: 8 },
+        fact: 'Clay from the banks of the Nile was shaped into bricks and pots, and dried in the sun or baked in a kiln.',
+    },
+    {
+        id: 'mud-brick', name: 'Mud Brick', col: -1, row: -1, color: '#b0764a',
+        fact: 'Mud bricks are made of clay and straw, dried in the sun. They keep houses cool in the desert heat.',
+    },
+    {
+        id: 'cut-block', name: 'Cut Sandstone', col: -1, row: -1, color: '#d6b57a', civ: 'meroe',
+        fact: 'Cut sandstone blocks were stacked to build the pyramids and temples of Kush.',
+    },
+    {
+        id: 'gold-leaf', name: 'Gold Leaf', col: -1, row: -1, color: '#f0d060',
+        fact: 'Gold can be hammered into sheets so thin that a little covers a large surface. Temples and tombs were decorated with it.',
+    },
+    {
+        id: 'kerma-beaker', name: 'Kerma Beaker', col: -1, row: -1, color: '#9a3a24', civ: 'kerma',
+        fact: 'A thin clay beaker from Kerma, red with a shiny black top. Kerma potters were among the best of the ancient world.',
+    },
+    {
+        id: 'taharqa-shabti', name: 'Shabti of Taharqa', col: -1, row: -1, color: '#5aa88f', civ: 'pharaohs',
+        fact: 'A small stone figure from the tomb of King Taharqa. Over 1,000 shabtis were buried with him to work for him in the afterlife.',
+    },
+    {
+        id: 'kandake-ring', name: "Queen's Gold Ring", col: -1, row: -1, color: '#e8b830', civ: 'kandake',
+        fact: 'A gold ring like the ones found in the pyramid of Queen Amanishakheto at Meroë, decorated with gods and gems.',
+    },
+    {
+        id: 'meroitic-tablet', name: 'Meroitic Tablet', col: -1, row: -1, color: '#a8946e', civ: 'script',
+        fact: 'A stone carved in Meroitic writing. We can read the letters aloud today, but nobody knows what most of the words mean.',
+    },
+    {
+        id: 'lion-amulet', name: 'Lion Amulet', col: -1, row: -1, color: '#c98a3a', civ: 'apedemak',
+        fact: 'A small lion charm for Apedemak, the lion god of Kush, who protected the king in war.',
     },
     {
         id: 'cowrie', name: 'Cowrie Shell', col: -1, row: -1, color: '#f1e3cf',

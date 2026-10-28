@@ -7,13 +7,16 @@
  * License:     MIT
  ******************************************************************************/
 
+import type { Ingredient } from './recipes.ts'
+
 export interface Quest {
     id: string
     title: string
     giver: string
     target: string
     requires?: string    // id of a quest that must be finished first
-    needs?: string[]     // item ids you must bring (see items.ts)
+    needs?: string[]     // item ids you must bring (see items.ts). Put an id in twice to need 2 of it
+    reward?: Ingredient[] // what you get when it is done
     offer: string[]
     goal: string
     reminder?: string[]  // what the target says if you don't have the items yet
@@ -24,43 +27,46 @@ export interface Quest {
 export const quests: Quest[] = [
     {
         id: 'iron',
+        reward: [{ id: 'wood', count: 2 }],
         title: 'The Iron Message',
         giver: 'Mustafa',
         target: 'Fatima',
         needs: ['iron-ore'],
         offer: [
             'Welcome to Meroë! My forge needs iron ore to make tools.',
-            'Search the sandy ground east of my forge for some, then take it to Fatima. She trades my iron for me.',
+            'Look for it near the old slag heaps by the river, on the west side of Meroë, then take it to Fatima. She trades my iron for me.',
         ],
         goal: 'Find iron ore and bring it to Fatima.',
-        reminder: ['Have you found the iron ore yet? Mustafa said to look east of his forge.'],
+        reminder: ['Have you found the iron ore yet? Mustafa said to look near the slag heaps by the river.'],
         thanks: ['Iron ore! Wonderful. Mustafa will be pleased.'],
         fact: 'Meroë was one of the great iron-working centers of ancient Africa. Large heaps of leftover iron slag can still be seen at the site today.',
     },
     {
         id: 'queen',
+        reward: [{ id: 'cut-block', count: 2 }],
         title: 'Word of the Queen',
         giver: 'Fatima',
         target: 'Amadi',
         needs: ['gold-nugget'],
         offer: [
             'Our land is ruled by a Kandake, a queen.',
-            'Her officials collect gold. Find a gold nugget in the northeast desert and take it to Amadi.',
+            'Her officials collect gold. Find a gold nugget in the desert around Napata, north of Meroë, and take it to Amadi.',
         ],
         goal: 'Find a gold nugget and bring it to Amadi.',
-        reminder: ['I am waiting for the gold nugget. Try the desert in the northeast.'],
+        reminder: ['I am waiting for the gold nugget. Try the desert around Napata, to the north.'],
         thanks: ['Gold for the Kandake! I will carry it to her officials. Long live the Kandake!'],
         fact: 'Kush was sometimes ruled by powerful queens called Kandake. Around 25 BCE, the Kushite queen Amanirenas fought against the Roman Empire.',
     },
     {
         id: 'pyramids',
+        reward: [{ id: 'cut-block', count: 4 }],
         title: 'The Steep Pyramids',
         giver: 'Mahmoud',
         target: 'Kasha',
         needs: ['sandstone'],
         offer: [
             'Do you see the pyramids to the east?',
-            'The builders need sandstone. Find a block near the pyramids and take it to Kasha, who keeps count of the stone.',
+            'The builders need sandstone. Find a block lying near the pyramids and take it to Kasha, who keeps count of the stone.',
         ],
         goal: 'Find a sandstone block and bring it to Kasha.',
         reminder: ['I still need a block of sandstone. There should be one near the pyramids.'],
@@ -69,6 +75,7 @@ export const quests: Quest[] = [
     },
     {
         id: 'egypt-trade',
+        reward: [{ id: 'gold-leaf', count: 2 }],
         title: 'Gifts for Egypt',
         giver: 'Fatima',
         target: 'Nebet',
@@ -76,7 +83,7 @@ export const quests: Quest[] = [
         needs: ['ivory', 'ebony'],
         offer: [
             "Egypt pays well for the riches of Kush.",
-            "Find some ivory and some ebony, then travel north into Egypt and give them to Nebet.",
+            "Find some ivory on the Red Sea coast and some ebony near Kerma, then travel north into Egypt and give them to Nebet.",
         ],
         goal: 'Find ivory and ebony, then take them north to Nebet in Egypt.',
         reminder: ["Do you have the ivory and the ebony? I cannot trade with empty hands."],
@@ -85,6 +92,7 @@ export const quests: Quest[] = [
     },
     {
         id: 'pharaoh',
+        reward: [{ id: 'granite', count: 1 }],
         title: 'The Kushite Pharaohs',
         giver: 'Hori',
         target: 'Hori',
@@ -100,6 +108,7 @@ export const quests: Quest[] = [
     },
     {
         id: 'rome-peace',
+        reward: [{ id: 'gold-nugget', count: 2 }],
         title: 'Peace with Rome',
         giver: 'Marcus',
         target: 'Marcus',
@@ -116,6 +125,7 @@ export const quests: Quest[] = [
     },
     {
         id: 'red-sea',
+        reward: [{ id: 'incense', count: 1 }],
         title: 'Spices of the Red Sea',
         giver: 'Demetrios',
         target: 'Demetrios',
@@ -132,32 +142,133 @@ export const quests: Quest[] = [
     },
     {
         id: 'aksum-caravan',
+        reward: [{ id: 'ivory', count: 1 }],
         title: 'The Caravan',
         giver: 'Berhane',
         target: 'Berhane',
         needs: ['iron-bar'],
         offer: [
             "Aksum is a crossroads of trade between Africa, Arabia and India.",
-            "My caravan needs iron for tools. Bring me an iron bar from the forges of Kush.",
+            "My caravan needs iron for tools. Bring me an iron bar. Take 2 iron ore to the furnace in Meroë and press E to smelt it.",
         ],
         goal: 'Bring an iron bar from Kush to Berhane in Aksum.',
-        reminder: ["Iron from the forges of Kush would help my caravan a great deal."],
+        reminder: ["I need an iron bar. Smelt 2 iron ore at the furnace in Meroë."],
         thanks: ["Good iron! My caravan can leave at dawn."],
         fact: 'Aksum grew rich as a trading crossroads. Its port, Adulis, linked Africa to Egypt, Arabia and India, and Aksum made its own gold, silver and bronze coins.',
     },
     {
         id: 'stelae',
+        reward: [{ id: 'cut-block', count: 4 }],
         title: 'The Great Stelae',
         giver: 'Dawit',
         target: 'Dawit',
         needs: ['granite'],
         offer: [
             "The tall stelae of Aksum mark the tombs of kings and nobles.",
-            "Find a block of fine granite at the quarry in the far southeast for my next pillar.",
+            "Find a block of fine granite at the quarry in the far southeast of Aksum for my next pillar.",
         ],
         goal: 'Find a block of granite and bring it to Dawit.',
         reminder: ["I still need good granite from the quarry."],
         thanks: ["Perfect granite! This pillar will stand for centuries."],
         fact: 'Aksum raised huge stone stelae, carved from single blocks of granite. The tallest still standing is about 24 meters high, and the largest ever, now fallen, was about 33 meters.',
+    },
+    {
+        id: 'kerma-pots',
+        title: 'The Potter of Kerma',
+        giver: 'Tebe',
+        target: 'Tebe',
+        needs: ['clay', 'clay', 'wood'],
+        reward: [{ id: 'mud-brick', count: 4 }],
+        offer: [
+            'I make pots the way the potters of Kerma did, thin as an eggshell.',
+            'Bring me 2 lumps of Nile clay and some acacia wood for my kiln. I will pay you in mud bricks for your building.',
+        ],
+        goal: 'Bring 2 Nile clay and 1 acacia wood to Tebe in Kerma.',
+        reminder: ['I need 2 clay and 1 wood. Clay lies around Kerma, and acacia wood near Napata.'],
+        thanks: ['Good clay, and dry wood! Here are the bricks I promised.'],
+        fact: 'Kerma potters made beakers with walls only a few millimeters thick, with a shiny black rim and a red body. They are among the finest pots of the ancient world.',
+    },
+    {
+        id: 'archers',
+        title: 'The Land of the Bow',
+        giver: 'Kheli',
+        target: 'Kheli',
+        needs: ['wood', 'wood'],
+        reward: [{ id: 'gold-nugget', count: 2 }],
+        offer: [
+            'My bow broke at practice this morning.',
+            'Bring me 2 pieces of acacia wood so I can make new bows. I will give you some gold from the hills.',
+        ],
+        goal: 'Bring 2 acacia wood to Kheli in Napata.',
+        reminder: ['Two pieces of acacia wood, friend. Look around Napata.'],
+        thanks: ['Strong, springy wood. A fine bow will come from this!'],
+        fact: 'Egyptians called Nubia Ta-Seti, the Land of the Bow. Kushite archers served in Egyptian armies and were famous across the ancient world.',
+    },
+    {
+        id: 'black-pharaohs',
+        title: 'The Shabti of the King',
+        giver: 'Mahmoud',
+        target: 'Mahmoud',
+        requires: 'pyramids',
+        needs: ['taharqa-shabti'],
+        reward: [{ id: 'cut-block', count: 4 }],
+        offer: [
+            'Long ago, our kings ruled Egypt. The greatest was Taharqa.',
+            'A shabti, a little figure from his tomb, is hidden in a chest near Napata. Bring it to me, and I will give you stone for your building.',
+        ],
+        goal: 'Find the Shabti of Taharqa in a chest near Napata and bring it to Mahmoud.',
+        reminder: ['Search the chests around Napata for the shabti of King Taharqa.'],
+        thanks: ['The king\'s shabti! Our history is in your hands, traveler.'],
+        fact: 'Taharqa ruled both Kush and Egypt. He was buried at Nuri, near Jebel Barkal, in the largest pyramid ever built in Nubia.',
+    },
+    {
+        id: 'script',
+        title: 'Words of Kush',
+        giver: 'Kasha',
+        target: 'Kasha',
+        requires: 'pyramids',
+        needs: ['meroitic-tablet'],
+        reward: [{ id: 'gold-nugget', count: 1 }],
+        offer: [
+            'I collect writings in our own Meroitic script.',
+            'There is a carved tablet hidden in a chest near the temples of Naqa. Will you bring it to me?',
+        ],
+        goal: 'Find the Meroitic Tablet in a chest at Naqa and bring it to Kasha.',
+        reminder: ['The tablet should be in a chest somewhere around Naqa.'],
+        thanks: ['Wonderful! I will copy every sign of it.'],
+        fact: 'Meroitic is one of the oldest written languages of Africa. Its letters can be read aloud, but the language itself has still not been fully understood.',
+    },
+    {
+        id: 'apedemak',
+        title: 'The Lion God',
+        giver: 'Sarem',
+        target: 'Sarem',
+        needs: ['lion-amulet'],
+        reward: [{ id: 'incense', count: 1 }],
+        offer: [
+            'An amulet of Apedemak, our lion god, was lost near this temple.',
+            'It is in a chest somewhere around Naqa. Please bring it back to me.',
+        ],
+        goal: 'Find the Lion Amulet in a chest at Naqa and bring it to Sarem.',
+        reminder: ['The amulet must be in a chest near Naqa.'],
+        thanks: ['The lion returns to his temple! Take this incense, with my thanks.'],
+        fact: 'The Lion Temple at Naqa was built by King Natakamani and Queen Amanitore about 2,000 years ago. Its walls show the royal couple next to Apedemak.',
+    },
+    {
+        id: 'kandake',
+        title: "The Queen's Ring",
+        giver: 'Fatima',
+        target: 'Mahmoud',
+        requires: 'queen',
+        needs: ['kandake-ring'],
+        reward: [{ id: 'gold-leaf', count: 2 }],
+        offer: [
+            'A gold ring that belonged to a Kandake was lost somewhere near Meroë.',
+            'It must be in a chest. Find it and bring it to Mahmoud, who keeps the royal records.',
+        ],
+        goal: "Find the Queen's Gold Ring in a chest near Meroë and bring it to Mahmoud.",
+        reminder: ["Have you found the queen's ring? Fatima said it was in a chest near Meroë."],
+        thanks: ['The ring of a Kandake! It will go back to the royal treasury.'],
+        fact: 'Kandakes such as Amanirenas, Amanitore and Amanishakheto ruled Kush. Amanishakheto\'s pyramid at Meroë held a treasure of gold jewelry, now in museums in Berlin and Munich.',
     },
 ]
