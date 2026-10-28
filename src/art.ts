@@ -1048,6 +1048,7 @@ export function drawQuestPanel(
     }
 
     // header: "QUESTS" on the left, one diamond per quest on the right
+    ctx.textAlign = 'left'
     ctx.textBaseline = 'middle'
     ctx.font = `700 13px ${FONT_TITLE}`
     ctx.fillStyle = '#e8c75a'
@@ -3830,6 +3831,7 @@ export function drawWaypointArrow(ctx: CanvasRenderingContext2D, w: number, h: n
     ctx.fill()
     ctx.stroke()
     ctx.restore()
+    ctx.save()
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.font = `700 13px ${FONT_TITLE}`
@@ -3837,4 +3839,26 @@ export function drawWaypointArrow(ctx: CanvasRenderingContext2D, w: number, h: n
     ctx.fillText(tiles + 'm', ax + 1, ay + 23)
     ctx.fillStyle = '#f6dc82'
     ctx.fillText(tiles + 'm', ax, ay + 22)
+    ctx.restore()
 }
+
+// One small arrow of the trail that leads to your waypoint (drawn on the ground)
+export function drawPathArrow(ctx: CanvasRenderingContext2D, x: number, y: number, angle: number, alpha: number) {
+    ctx.save()
+    ctx.translate(x, y)
+    ctx.rotate(angle)
+    ctx.globalAlpha = alpha
+    ctx.fillStyle = '#f6dc82'
+    ctx.strokeStyle = 'rgba(26, 17, 10, 0.7)'
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    ctx.moveTo(7, 0)
+    ctx.lineTo(-5, -6)
+    ctx.lineTo(-2, 0)
+    ctx.lineTo(-5, 6)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    ctx.restore()
+}
+

@@ -24,7 +24,7 @@ import {
     drawQuestMap, drawQuestPanel,
     drawRegionBanner, drawStamina,
     drawStation, drawTutorial,
-    drawTileArt, drawTitleScreen, drawTooltip, drawWaypointArrow, drawWaypointBeacon, mapView, pointer, skinFor, windowLayout,
+    drawTileArt, drawTitleScreen, drawTooltip, drawPathArrow, drawWaypointArrow, drawWaypointBeacon, mapView, pointer, skinFor, windowLayout,
 } from './art.ts'
 import type { Held, Slots, Stack } from './inventory.ts'
 import { MAX_STACK, addTo, countIn, leftClick, makeSlots, removeFrom, rightClick, shiftClick, takeOne } from './inventory.ts'
@@ -334,6 +334,59 @@ let mapOpen = false
 
 // Your waypoint (set by clicking the World Map), or null if you have none
 let waypoint: { col: number; row: number } | null = null
+
+// The walking route to your waypoint: a list of tiles. It is worked out again when you reach a new tile.
+let waypointPath: { col: number; row: number }[] = []
+let pathFor = ''   // which start tile, waypoint and buildings the route was worked out for
+
+// Finds the shortest walking route from one tile to (next to) another, around anything solid.
+// It spreads out from the start one ring of tiles at a time (a "breadth-first search"),
+// remembering where it came from, then follows those steps back from the end.
+function findPath(fromCol: number, fromRow: number, toCol: number, toRow: number): { col: number; row: number }[] {
+    const cols = rows[0].length
+    const cameFrom = new Int32Array(cols * rows.length).fill(-1)
+    const start = fromRow * cols + fromCol
+    cameFrom[start] = start
+    const queue = [start]
+    let end = -1
+    for (let head = 0; head < queue.length; head++) {
+        const k = queue[head]
+        const c = k % cols
+        const r = (k - c) / cols
+        if (Math.abs(c - toCol) <= 1 && Math.abs(r - toRow) <= 1) {
+            end = k   // close enough (the waypoint itself might be on something solid)
+            break
+        }
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const nc = c + dx
+            const nr = r + dy
+            if (nc < 0 || nr < 0 || nc >= cols || nr >= rows.length) continue
+            const nk = nr * cols + nc
+            if (cameFrom[nk] !== -1 || isSolid(nc, nr)) continue
+            cameFrom[nk] = k
+            queue.push(nk)
+        }
+    }
+    if (end < 0) return []   // no way to get there
+    const path: { col: number; row: number }[] = []
+    for (let k = end; k !== start; k = cameFrom[k]) path.push({ col: k % cols, row: Math.floor(k / cols) })
+    return path.reverse()
+}
+
+function updateWaypointPath() {
+    if (!waypoint) {
+        waypointPath = []
+        pathFor = ''
+        return
+    }
+    const col = toTile(player.x + player.size / 2)
+    const row = toTile(player.y + player.size / 2)
+    const key = col + ',' + row + ',' + waypoint.col + ',' + waypoint.row + ',' + built.size
+    if (key !== pathFor) {
+        pathFor = key
+        waypointPath = findPath(col, row, waypoint.col, waypoint.row)
+    }
+}
 let codexOpen = false
 let codexIndex = 0   // which page is selected in the Codex
 let codexTab: 'kush' | 'world' = 'kush'   // which tab of the Codex is showing
@@ -423,8 +476,9 @@ function tickAnimals() {
             a.targetY = a.homeY + (Math.random() * 8 - 4) * TILE
             continue
         }
-        const nx = a.x + (dx / d) * 0.7
-        const ny = a.y + (dy / d) * 0.7
+        const step = Math.min(d, 0.7 * frameScale)
+        const nx = a.x + (dx / d) * step
+        const ny = a.y + (dy / d) * step
         if (animalBlocked(nx, ny)) {
             a.targetX = a.x   // something is in the way: give up and pick a new spot next time
             a.targetY = a.y
@@ -1241,12 +1295,12 @@ function update() {
     if (tired && stamina > 0.3) tired = false
     const sprinting = wantsSprint && !tired
     if (sprinting) {
-        stamina = Math.max(0, stamina - 0.004)
+        stamina = Math.max(0, stamina - 0.004 * frameScale)
         if (stamina === 0) tired = true
     } else {
-        stamina = Math.min(1, stamina + 0.003)
+        stamina = Math.min(1, stamina + 0.003 * frameScale)
     }
-    const speed = player.speed * (sprinting ? 1.6 : 1)
+    const speed = player.speed * (sprinting ? 1.6 : 1) * frameScale
 
     // Diagonal x & y
     if (keys.has('a') || keys.has('arrowleft')) dx -= 1
@@ -1412,8 +1466,21 @@ function draw() {
         drawAnimal(ctx, a.x, a.y, a.def.kind, a.facing, a.moving, time)
     }
 
-    // Your waypoint: a column of light
-    if (waypoint) drawWaypointBeacon(ctx, waypoint.col * TILE, waypoint.row * TILE, time)
+    // Your waypoint: a column of light, and a trail of arrows on the ground that leads there
+    if (waypoint) {
+        drawWaypointBeacon(ctx, waypoint.col * TILE, waypoint.row * TILE, time)
+        updateWaypointPath()
+        const shown = Math.min(waypointPath.length, 60)
+        for (let i = 0; i < shown; i += 2) {   // an arrow on every second tile
+            const here = waypointPath[i]
+            const next = waypointPath[i + 1] ?? waypoint
+            const angle = Math.atan2(next.row - here.row, next.col - here.col)
+            // a glow runs along the trail toward the waypoint; arrows fade out far ahead
+            const wave = (Math.sin(time / 160 - i * 0.5) + 1) / 2
+            const fade = 1 - i / (shown + 8)
+            drawPathArrow(ctx, here.col * TILE + TILE / 2, here.row * TILE + TILE / 2, angle, (0.35 + 0.6 * wave) * fade)
+        }
+    }
 
     // Draws the player (the look comes from the character designer)
     drawPerson(ctx, player.x, player.y, player.size, appearance, player.facing, player.moving, time)
@@ -1671,6 +1738,9 @@ function scatterWorld() {
 }
 
 let endingShown = false   // the ending screen is only shown once
+
+let lastFrameAt = performance.now()
+let frameScale = 1   // 1 at 60 frames a second, 2 at 30, and so on
 
 // --- Settings --------------------------------------------------------------
 // Kept in the browser on their own, so they stay even when auto-save is off
@@ -2020,6 +2090,12 @@ function usePause(id: string) {
 
 // Loop to run all the functions and update the frames
 function loop() {
+    // How long the last frame took, compared to a normal 60-frames-a-second frame. On a slow computer
+    // frames take longer, so everything moves further each frame and the speed stays the same.
+    const now = performance.now()
+    frameScale = Math.min(3, (now - lastFrameAt) / (1000 / 60))
+    lastFrameAt = now
+
     if (screen === 'playing') {
         update()
         if (!pauseOpen) tickFurnace()   // the pause menu freezes the world
