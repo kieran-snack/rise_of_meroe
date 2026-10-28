@@ -77,11 +77,11 @@ export const itemDefs: ItemDef[] = [
         fact: 'Granite is an extremely hard stone. Builders in Aksum cut and raised huge granite pillars without modern machines.',
     },
     {
-        id: 'wood', name: 'Acacia Wood', col: -1, row: -1, color: '#8a5a2b', spawn: { area: 'napata', count: 8 },
+        id: 'wood', name: 'Acacia Wood', col: -1, row: -1, color: '#8a5a2b', spawn: { area: 'napata', count: 12 },
         fact: 'Wood and charcoal fueled the furnaces of Meroë. Smelting iron used so much fuel that the forests around the city were cut down.',
     },
     {
-        id: 'clay', name: 'Nile Clay', col: -1, row: -1, color: '#9a6b4a', spawn: { area: 'kerma', count: 8 },
+        id: 'clay', name: 'Nile Clay', col: -1, row: -1, color: '#9a6b4a', spawn: { area: 'kerma', count: 10 },
         fact: 'Clay from the banks of the Nile was shaped into bricks and pots, and dried in the sun or baked in a kiln.',
     },
     {
@@ -115,6 +115,54 @@ export const itemDefs: ItemDef[] = [
     {
         id: 'lion-amulet', name: 'Lion Amulet', col: -1, row: -1, color: '#c98a3a', civ: 'apedemak',
         fact: 'A small lion charm for Apedemak, the lion god of Kush, who protected the king in war.',
+    },
+    {
+        id: 'gold-collar', name: 'Gold Collar', col: -1, row: -1, color: '#f0c840',
+        fact: 'A wide collar of gold and blue faience, the kind worn by the kings and queens of Kush.',
+    },
+    {
+        id: 'bead-necklace', name: 'Bead Necklace', col: -1, row: -1, color: '#5ab8a8',
+        fact: 'A necklace of glass beads and cowrie shells. Jewelry like this was worn all over Kush.',
+    },
+    {
+        id: 'copper-mirror', name: 'Copper Mirror', col: -1, row: -1, color: '#d08a50',
+        fact: 'A polished copper mirror. People in Kush used mirrors like this long before glass mirrors.',
+    },
+    {
+        id: 'iron-spear', name: 'Iron Spear', col: -1, row: -1, color: '#7a7f88',
+        fact: 'An iron spear. Iron weapons helped Kush defend itself, even against Rome.',
+    },
+    {
+        id: 'iron-hoe', name: 'Iron Hoe', col: -1, row: -1, color: '#6b6f75',
+        fact: 'An iron hoe for digging fields. Iron tools helped farmers grow more food.',
+    },
+    {
+        id: 'lion-statue', name: 'Lion Statue', col: -1, row: -1, color: '#d9b878',
+        fact: 'A small stone lion for Apedemak, the lion god of Kush.',
+    },
+    {
+        id: 'offering-table', name: 'Offering Table', col: -1, row: -1, color: '#9a958d',
+        fact: 'A stone offering table, carved with a prayer in Meroitic writing.',
+    },
+    {
+        id: 'feather-fan', name: 'Ostrich Feather Fan', col: -1, row: -1, color: '#f5efe2',
+        fact: 'A royal fan of ostrich feathers on a wooden handle.',
+    },
+    {
+        id: 'leopard-cloak', name: 'Leopard-Skin Cloak', col: -1, row: -1, color: '#d8a24a',
+        fact: 'A cloak of leopard skin, worn by priests in ceremonies.',
+    },
+    {
+        id: 'sorghum-bread', name: 'Sorghum Bread', col: -1, row: -1, color: '#c8964f',
+        fact: 'A flat loaf of sorghum bread, a main food of Kush.',
+    },
+    {
+        id: 'date-cakes', name: 'Date Cakes', col: -1, row: -1, color: '#7a4422',
+        fact: 'Sweet cakes of pressed dates, good food for a long journey.',
+    },
+    {
+        id: 'black-pot', name: 'Black-Topped Pot', col: -1, row: -1, color: '#8a2e1c',
+        fact: 'A red pot with a shiny black rim, made the old way of the Kerma potters.',
     },
     {
         id: 'cowrie', name: 'Cowrie Shell', col: -1, row: -1, color: '#f1e3cf',

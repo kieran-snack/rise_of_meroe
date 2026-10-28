@@ -1268,7 +1268,7 @@ export function drawTitleScreen(ctx: CanvasRenderingContext2D, w: number, h: num
 
     ctx.font = `600 ${Math.max(18, size * 0.3)}px ${FONT_BODY}`
     ctx.fillStyle = '#f3ead6'
-    ctx.fillText('Rebuild the capital of the Kingdom of Kush', cx, oy + 30)
+    ctx.fillText('Rebuild Meroë, the capital of Kush :)', cx, oy + 30)
 
     // the menu
     const bw = Math.min(380, w - 40)
@@ -2334,62 +2334,127 @@ export function drawFurnaceScreen(
     ctx.restore()
 }
 
-// A row in the crafting window
+// One ingredient in a recipe, with how many you have
+export interface CraftPart {
+    name: string
+    color: string
+    have: number
+    need: number
+}
+
+// A recipe in the crafting window
 export interface CraftRow {
     id: string
     name: string
-    cost: string        // like "2 Sandstone Block"
-    result: string      // like "1 Cut Sandstone"
+    inputs: CraftPart[]
+    output: Slot          // what you get (its count is how many)
+    forCapital: boolean   // needed for the buildings of the capital
     canCraft: boolean
 }
 
-// The crafting window of a station (stoneworks, goldsmith, brickyard)
-export function drawCraftScreen(ctx: CanvasRenderingContext2D, w: number, h: number, title: string, rows: CraftRow[]) {
+// The crafting window of a station: one card per recipe
+export function drawCraftScreen(ctx: CanvasRenderingContext2D, w: number, h: number, station: string, title: string, rows: CraftRow[], time: number) {
     ctx.save()
     ctx.fillStyle = 'rgba(14, 9, 5, 0.75)'
     ctx.fillRect(0, 0, w, h)
-    const rowH = 64
-    const pw = Math.min(600, w - 40)
-    const ph = Math.min(h - 40, 130 + rows.length * rowH)
+    const rowH = Math.max(56, Math.min(78, Math.floor((h - 190) / Math.max(1, rows.length))))
+    const pw = Math.min(720, w - 40)
+    const ph = Math.min(h - 30, 150 + rows.length * rowH)
     const px = Math.round((w - pw) / 2)
     const py = Math.round((h - ph) / 2)
     drawPanel(ctx, px, py, pw, ph)
     addButton('panel', px, py, pw, ph)
     drawCloseButton(ctx, px, py, pw)
 
+    // the header: the station's picture next to its name
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.font = `700 22px ${FONT_TITLE}`
+    ctx.font = `700 24px ${FONT_TITLE}`
+    const tw = ctx.measureText(title).width
+    drawStation(ctx, w / 2 - tw / 2 - 46, py + 18, station, time)
     ctx.fillStyle = '#e8c75a'
-    ctx.fillText(title, w / 2, py + 34)
+    ctx.fillText(title, w / 2, py + 36)
+    ctx.font = `600 16px ${FONT_BODY}`
+    ctx.fillStyle = '#c9b98a'
+    ctx.fillText('Click CRAFT to make an item from the materials you carry.', w / 2, py + 66)
 
     rows.forEach((row, i) => {
-        const y = py + 66 + i * rowH
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.05)'
+        const x = px + 22
+        const y = py + 88 + i * rowH
+        const cw = pw - 44
+        const ch = rowH - 8
+        // the card
+        ctx.fillStyle = row.canCraft ? 'rgba(232, 199, 90, 0.09)' : 'rgba(255, 255, 255, 0.04)'
         ctx.beginPath()
-        ctx.roundRect(px + 20, y, pw - 40, rowH - 8, 6)
+        ctx.roundRect(x, y, cw, ch, 8)
         ctx.fill()
+        ctx.strokeStyle = row.canCraft ? 'rgba(232, 199, 90, 0.6)' : 'rgba(201, 162, 39, 0.22)'
+        ctx.lineWidth = 1
+        ctx.stroke()
+
+        // what you make, in a slot on the left
+        const ss = Math.min(48, ch - 8)
+        drawSlot(ctx, x + 8, y + (ch - ss) / 2, ss, row.output, false)
+
+        // its name (and a tag if the capital needs it)
+        const tx = x + ss + 22
         ctx.textAlign = 'left'
+        ctx.textBaseline = 'middle'
         ctx.font = `700 14px ${FONT_TITLE}`
         ctx.fillStyle = '#f3ead6'
-        ctx.fillText(row.name.toUpperCase(), px + 34, y + 18)
-        ctx.font = `600 17px ${FONT_BODY}`
-        ctx.fillStyle = row.canCraft ? '#c9d9a0' : '#b08a7a'
-        ctx.fillText(row.cost + '  →  ' + row.result, px + 34, y + 40)
-        const bx = px + pw - 110
-        const on = row.canCraft && hovering(bx - 40, y + 8, 80, rowH - 24)
-        ctx.fillStyle = !row.canCraft ? '#4a3a2a' : on ? '#f6dc82' : '#e8c75a'
+        const nameY = y + ch * 0.32
+        ctx.fillText(row.name.toUpperCase(), tx, nameY)
+        if (row.forCapital) {
+            const nw = ctx.measureText(row.name.toUpperCase()).width
+            ctx.font = `700 9px ${FONT_TITLE}`
+            const tagW = ctx.measureText('FOR THE CAPITAL').width + 12
+            ctx.fillStyle = '#c9a227'
+            ctx.beginPath()
+            ctx.roundRect(tx + nw + 10, nameY - 8, tagW, 16, 8)
+            ctx.fill()
+            ctx.fillStyle = '#1a110a'
+            ctx.fillText('FOR THE CAPITAL', tx + nw + 16, nameY + 1)
+        }
+
+        // the ingredients: a small picture of each, with have / need
+        let cx = tx
+        const chipY = y + ch * 0.72
+        for (const part of row.inputs) {
+            ctx.save()
+            ctx.translate(cx - 4, chipY - 11)
+            ctx.scale(0.65, 0.65)
+            drawItem(ctx, 0, 0, part.color, -(cx * 300))   // (a fixed "time", so it does not bob)
+            ctx.restore()
+            ctx.font = `600 16px ${FONT_BODY}`
+            const ok = part.have >= part.need
+            ctx.fillStyle = ok ? '#a8d98a' : '#e08a7a'
+            const count = Math.min(part.have, 99) + '/' + part.need
+            ctx.fillText(count, cx + 18, chipY)
+            const cwid = ctx.measureText(count).width
+            ctx.fillStyle = '#d8ccb0'
+            ctx.fillText(part.name, cx + 22 + cwid, chipY)
+            cx += 22 + cwid + ctx.measureText(part.name).width + 18
+        }
+
+        // the button
+        const bw = 96
+        const bh = Math.min(38, ch - 16)
+        const bx = x + cw - bw - 12
+        const by = y + (ch - bh) / 2
+        const on = row.canCraft && hovering(bx, by, bw, bh)
+        ctx.fillStyle = !row.canCraft ? '#3a2e22' : on ? '#f6dc82' : '#e8c75a'
         ctx.beginPath()
-        ctx.roundRect(bx - 40, y + 8, 80, rowH - 24, 6)
+        ctx.roundRect(bx, by, bw, bh, bh / 2)
         ctx.fill()
         ctx.textAlign = 'center'
         ctx.font = `700 13px ${FONT_TITLE}`
-        ctx.fillStyle = row.canCraft ? '#1a110a' : '#8a7a62'
-        ctx.fillText('CRAFT', bx, y + rowH / 2 - 4)
-        if (row.canCraft) addButton('craft:' + row.id, bx - 40, y + 8, 80, rowH - 24)
+        ctx.fillStyle = row.canCraft ? '#1a110a' : '#7a6a52'
+        ctx.fillText('CRAFT', bx + bw / 2, by + bh / 2 + 1)
+        if (row.canCraft) addButton('craft:' + row.id, bx, by, bw, bh)
     })
 
     ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
     ctx.font = `700 11px ${FONT_TITLE}`
     ctx.fillStyle = '#c9b98a'
     ctx.fillText('E OR ESC: CLOSE', w / 2, py + ph - 18)
@@ -2534,6 +2599,21 @@ export function drawStation(ctx: CanvasRenderingContext2D, x: number, y: number,
         ctx.fillRect(x + 17, y + 11, 8, 3)
         ctx.fillStyle = 'rgba(255, 246, 200, ' + (0.4 + Math.sin(time / 300) * 0.3) + ')'
         ctx.fillRect(x + 11, y + 9, 2, 2)
+    } else if (kind === 'kiln') {
+        // a round clay oven with a fire in its mouth
+        ctx.fillStyle = '#a8683f'
+        ctx.beginPath()
+        ctx.arc(x + 16, y + 20, 12, Math.PI, 0)
+        ctx.fill()
+        ctx.fillRect(x + 4, y + 20, 24, 8)
+        ctx.fillStyle = '#8a5230'
+        ctx.fillRect(x + 4, y + 26, 24, 2)
+        ctx.fillStyle = '#1a110a'
+        ctx.beginPath()
+        ctx.arc(x + 16, y + 26, 5, Math.PI, 0)
+        ctx.fill()
+        ctx.fillStyle = '#ff9a3c'
+        ctx.fillRect(x + 13, y + 24 - Math.abs(Math.sin(time / 120)) * 2, 6, 3)
     } else {
         // brickyard: stacks of mud bricks
         ctx.fillStyle = '#b0764a'

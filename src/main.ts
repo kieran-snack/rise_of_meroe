@@ -219,7 +219,7 @@ let chestUi: ChestUi | null = null
 
 // --- Stations, crafting and building --------------------------------------
 // The workplaces in Meroë. They are solid, so you stand next to one and press E.
-const STATIONS = ['furnace', 'stoneworks', 'goldsmith', 'brickyard']
+const STATIONS = ['furnace', 'stoneworks', 'goldsmith', 'brickyard', 'kiln']
 const stationTiles = STATIONS.map(name => ({ name, ...at(name) }))
 
 // The furnace: slot 0 = ore, slot 1 = fuel, slot 2 = the bars that come out
@@ -1428,14 +1428,16 @@ function draw() {
     }
 
     if (panelUi !== null && panelUi.kind === 'craft') {
+        const colorOf = (id: string) => itemDefs.find(i => i.id === id)?.color ?? '#888'
         const rows: CraftRow[] = recipes.filter(r => r.station === panelUi!.id).map(r => ({
             id: r.id,
             name: r.name,
-            cost: r.inputs.map(i => i.count + ' ' + nameOf(i.id)).join(', '),
-            result: r.output.count + ' ' + nameOf(r.output.id),
+            inputs: r.inputs.map(i => ({ name: nameOf(i.id), color: colorOf(i.id), have: countIn(inventory, i.id), need: i.count })),
+            output: viewOne({ id: r.output.id, count: r.output.count })!,
+            forCapital: buildingDefs.some(b => b.cost.some(c => c.id === r.output.id)),
             canCraft: r.inputs.every(i => hasItem(i.id, i.count)),
         }))
-        drawCraftScreen(ctx, w, h, (stationNames[panelUi.id] ?? panelUi.id).toUpperCase(), rows)
+        drawCraftScreen(ctx, w, h, panelUi.id, (stationNames[panelUi.id] ?? panelUi.id).toUpperCase(), rows, time)
     }
 
     if (panelUi !== null && panelUi.kind === 'build') {
