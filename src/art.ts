@@ -13,8 +13,8 @@ export const TILE = 32
 export type Facing = 'up' | 'down' | 'left' | 'right'
 
 // How a person is dressed and how their hair looks
-export type Outfit = 'kilt' | 'robe' | 'dress'
-export type Hair = 'short' | 'braids' | 'bald' | 'headwrap'
+export type Outfit = 'kilt' | 'robe' | 'dress' | 'tunic' | 'leopard'
+export type Hair = 'short' | 'braids' | 'bald' | 'headwrap' | 'curly' | 'long' | 'cap'
 
 // The characters of the tiles around one tile. Used for shorelines and to
 // draw multi-tile buildings (like the 2x2 pyramids) as one picture.
@@ -33,6 +33,9 @@ export interface PersonLook {
     accent: string
     outfit: Outfit
     hair: Hair
+    hairColor?: string   // (black if not given)
+    extra?: string       // 'necklace', 'earrings', 'armbands', 'feather' or nothing
+    crown?: boolean      // the gold crown you get for finishing the capital
 }
 
 // Gives the same "random" number for the same tile every frame, so the
@@ -66,28 +69,85 @@ function drawSand(ctx: CanvasRenderingContext2D, x: number, y: number, col: numb
 }
 
 function drawWater(ctx: CanvasRenderingContext2D, x: number, y: number, col: number, row: number, time: number, n: Neighbors) {
-    ctx.fillStyle = '#2f86c8'
-    ctx.fillRect(x, y, TILE, TILE)
-    ctx.fillStyle = '#3a95d8'
-    ctx.fillRect(x, y + 16, TILE, 16)
+    // which sides touch land? (' ' is off the map: treat it as more water)
+    const land = (c: string) => c !== '~' && c !== ' '
+    const up = land(n.up)
+    const down = land(n.down)
+    const left = land(n.left)
+    const right = land(n.right)
+    const shore = up || down || left || right
 
-    // gently moving waves
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'
-    ctx.lineWidth = 2
+    // the color drifts slowly across the water in big soft patches, so it never looks like tiles
+    const v = Math.sin(col * 0.33 + row * 0.21 + time / 2600) * 0.5 + Math.sin(col * 0.12 - row * 0.29 - time / 3900) * 0.5
+    const r = Math.round(36 + v * 7 + (shore ? 26 : 0))
+    const g = Math.round(122 + v * 12 + (shore ? 40 : 0))
+    const b = Math.round(190 + v * 10 + (shore ? 8 : 0))
+    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`
+    ctx.fillRect(x, y, TILE, TILE)
+
+    // shallow, lighter water along the edges that touch land
+    ctx.fillStyle = 'rgba(140, 215, 215, 0.35)'
+    if (up) ctx.fillRect(x, y, TILE, 9)
+    if (down) ctx.fillRect(x, y + TILE - 9, TILE, 9)
+    if (left) ctx.fillRect(x, y, 9, TILE)
+    if (right) ctx.fillRect(x + TILE - 9, y, 9, TILE)
+
+    // little waves: each tile has two, in its own spot, that slowly appear, drift and fade
+    ctx.lineWidth = 1.6
     ctx.lineCap = 'round'
     for (let i = 0; i < 2; i++) {
-        const wy = y + 9 + i * 14
-        const shift = Math.sin(time / 600 + col * 0.5 + row * 0.8 + i * 2) * 4
+        const hash = Math.abs((col * 73856093) ^ (row * 19349663) ^ (i * 83492791))
+        const ox = hash % 18
+        const oy = 5 + ((hash >> 5) % 22)
+        const phase = ((hash >> 10) % 100) / 16
+        const a = (Math.sin(time / 800 + phase) + 1) / 2
+        if (a < 0.15) continue
+        const drift = Math.sin(time / 1100 + phase) * 3
+        ctx.strokeStyle = `rgba(255, 255, 255, ${0.45 * a})`
         ctx.beginPath()
-        ctx.moveTo(x + 5 + shift, wy)
-        ctx.quadraticCurveTo(x + 12 + shift, wy - 3, x + 19 + shift, wy)
+        ctx.moveTo(x + ox + drift, y + oy)
+        ctx.quadraticCurveTo(x + ox + 5 + drift, y + oy - 3, x + ox + 10 + drift, y + oy)
         ctx.stroke()
     }
 
-    // foam where the water meets the shore
-    if (n.right !== '~') {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'
-        ctx.fillRect(x + TILE - 4, y, 4, TILE)
+    // now and then the sun glints on the water
+    const glint = Math.abs((col * 92837111) ^ (row * 689287499)) % 9
+    if (glint === 0) {
+        const t = (Math.sin(time / 380 + col + row * 2) + 1) / 2
+        if (t > 0.6) {
+            ctx.fillStyle = `rgba(255, 255, 240, ${(t - 0.6) * 2.2})`
+            ctx.beginPath()
+            ctx.moveTo(x + 20, y + 12)
+            ctx.lineTo(x + 22, y + 14)
+            ctx.lineTo(x + 20, y + 16)
+            ctx.lineTo(x + 18, y + 14)
+            ctx.fill()
+        }
+    }
+
+    // white foam where the water laps against the shore
+    if (shore) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)'
+        ctx.lineWidth = 2
+        const wob = (k: number) => Math.sin(time / 500 + k * 0.4 + col + row) * 1.5
+        ctx.beginPath()
+        if (up) {
+            ctx.moveTo(x, y + 2 + wob(0))
+            for (let k = 8; k <= TILE; k += 8) ctx.lineTo(x + k, y + 2 + wob(k))
+        }
+        if (down) {
+            ctx.moveTo(x, y + TILE - 2 + wob(1))
+            for (let k = 8; k <= TILE; k += 8) ctx.lineTo(x + k, y + TILE - 2 + wob(k + 1))
+        }
+        if (left) {
+            ctx.moveTo(x + 2 + wob(2), y)
+            for (let k = 8; k <= TILE; k += 8) ctx.lineTo(x + 2 + wob(k + 2), y + k)
+        }
+        if (right) {
+            ctx.moveTo(x + TILE - 2 + wob(3), y)
+            for (let k = 8; k <= TILE; k += 8) ctx.lineTo(x + TILE - 2 + wob(k + 3), y + k)
+        }
+        ctx.stroke()
     }
 }
 
@@ -170,53 +230,102 @@ function drawBlock(ctx: CanvasRenderingContext2D, x: number, y: number, char: st
     ctx.drawImage(sprite, b.ox * TILE, b.oy * TILE, TILE, TILE, x, y, TILE, TILE)
 }
 
-// A mud-brick house. Bigger buildings get more doors and windows.
+// A mud-brick house, in the style of Nubian houses: plastered walls with a painted band,
+// wooden roof beams sticking out, arched doors and small latticed windows. Bigger buildings get more of each.
 function paintHouse(ctx: CanvasRenderingContext2D, w: number, h: number) {
-    // mud-brick walls
-    ctx.fillStyle = '#c9915f'
-    ctx.fillRect(0, 0, w, h)
-
-    // brick rows (staggered)
-    ctx.fillStyle = 'rgba(90, 50, 20, 0.28)'
-    let r = 0
-    for (let by = 14; by < h; by += 6) {
-        ctx.fillRect(0, by, w, 1)
-        for (let bx = r % 2 === 0 ? 5 : 10; bx < w; bx += 10) ctx.fillRect(bx, by - 6, 1, 6)
-        r++
+    // a fixed "random" so the same size of house always looks the same
+    let seed = w * 7 + h * 13
+    const rand = () => {
+        seed = (seed * 9301 + 49297) % 233280
+        return seed / 233280
     }
 
-    // flat roof with a shadow lip
-    ctx.fillStyle = '#8a5a35'
-    ctx.fillRect(0, 0, w, 9)
-    ctx.fillStyle = '#6e4526'
-    ctx.fillRect(0, 9, w, 2)
-    ctx.fillStyle = '#a06c42'
+    // plastered walls, slightly uneven
+    const wall = ctx.createLinearGradient(0, 0, 0, h)
+    wall.addColorStop(0, '#d9a874')
+    wall.addColorStop(1, '#c48e5c')
+    ctx.fillStyle = wall
+    ctx.fillRect(0, 0, w, h)
+    for (let i = 0; i < (w * h) / 60; i++) {
+        ctx.fillStyle = rand() < 0.5 ? 'rgba(255, 240, 210, 0.18)' : 'rgba(110, 60, 25, 0.14)'
+        ctx.fillRect(rand() * w, 12 + rand() * (h - 12), 2, 1)
+    }
+    // faint bricks showing through the plaster near the bottom
+    ctx.fillStyle = 'rgba(110, 60, 25, 0.18)'
+    for (let by = h - 14; by < h - 2; by += 5) {
+        ctx.fillRect(0, by, w, 1)
+        for (let bx = (by % 10) / 2; bx < w; bx += 10) ctx.fillRect(bx, by, 1, 5)
+    }
+
+    // the flat roof with a low wall (parapet) around it
+    ctx.fillStyle = '#9a6a40'
+    ctx.fillRect(0, 0, w, 8)
+    ctx.fillStyle = '#b78250'
     ctx.fillRect(0, 0, w, 2)
+    ctx.fillStyle = '#7a4f2c'
+    ctx.fillRect(0, 8, w, 2)
+    // the ends of the wooden roof beams poke out under the roof
+    ctx.fillStyle = '#5a3820'
+    for (let bx = 6; bx < w - 4; bx += 12) ctx.fillRect(bx, 10, 4, 3)
 
-    // shaded right edge and bottom for depth
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.18)'
-    ctx.fillRect(w - 3, 11, 3, h - 11)
-    ctx.fillRect(0, h - 2, w, 2)
+    // a painted band under the roof: white with ochre triangles, like Nubian house decoration
+    ctx.fillStyle = '#efe2c4'
+    ctx.fillRect(0, 14, w, 5)
+    ctx.fillStyle = '#b8642e'
+    for (let tx = 0; tx < w; tx += 8) {
+        ctx.beginPath()
+        ctx.moveTo(tx, 19)
+        ctx.lineTo(tx + 4, 14)
+        ctx.lineTo(tx + 8, 19)
+        ctx.fill()
+    }
 
-    // one arched door for every 3 tiles of width
+    // doors: one for every 3 tiles of width, arched, made of planks, with a stone step
     const doors = Math.max(1, Math.round(w / 96))
-    const dh = Math.min(20, h - 14)
+    const dh = Math.min(22, h - 22)
     for (let k = 0; k < doors; k++) {
-        const cx = ((k + 0.5) * w) / doors
-        ctx.fillStyle = '#3b2414'
+        const cx = Math.round(((k + 0.5) * w) / doors)
+        ctx.fillStyle = '#efe2c4'                     // the white frame around the door
+        ctx.fillRect(cx - 8, h - dh - 2, 16, dh + 2)
+        ctx.beginPath()
+        ctx.arc(cx, h - dh - 2, 8, Math.PI, 0)
+        ctx.fill()
+        ctx.fillStyle = '#6b4226'                     // the wooden door
         ctx.fillRect(cx - 6, h - dh, 12, dh)
         ctx.beginPath()
         ctx.arc(cx, h - dh, 6, Math.PI, 0)
         ctx.fill()
+        ctx.fillStyle = '#4e2f1a'                     // the planks
+        ctx.fillRect(cx - 2, h - dh - 4, 1, dh + 4)
+        ctx.fillRect(cx + 2, h - dh - 4, 1, dh + 4)
+        ctx.fillStyle = '#e8c75a'                     // a small metal ring
+        ctx.fillRect(cx + 3, h - dh / 2, 2, 2)
+        ctx.fillStyle = '#a89070'                     // the step
+        ctx.fillRect(cx - 9, h - 2, 18, 2)
     }
 
-    // window slits: one row on tall houses, more rows on huge ones
-    ctx.fillStyle = '#3b2414'
-    for (let wy = 24; wy < h - 30; wy += 40) {
-        for (let k = 0; k < doors * 2; k++) {
-            ctx.fillRect(((k + 0.5) * w) / (doors * 2) - 2, wy, 4, 8)
+    // small windows with wooden lattice, beside the doors (and higher up on tall buildings)
+    for (let wy = 26; wy < h - 26; wy += 34) {
+        for (let k = 0; k < doors; k++) {
+            for (const side of [-1, 1]) {
+                const wx = Math.round(((k + 0.5) * w) / doors + side * Math.min(22, w / doors / 3)) - 4
+                if (wx < 3 || wx > w - 11) continue
+                ctx.fillStyle = '#3b2414'
+                ctx.fillRect(wx, wy, 8, 8)
+                ctx.fillStyle = '#8a5a35'
+                ctx.fillRect(wx + 3.5, wy, 1, 8)
+                ctx.fillRect(wx, wy + 3.5, 8, 1)
+                ctx.fillStyle = '#efe2c4'
+                ctx.fillRect(wx - 1, wy + 8, 10, 1.5)      // the white sill
+            }
         }
     }
+
+    // shading: the right edge and the bottom are darker, for depth
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.16)'
+    ctx.fillRect(w - 4, 10, 4, h - 10)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.12)'
+    ctx.fillRect(0, h - 3, w, 3)
 }
 
 // Kushite pyramids are much steeper than Egyptian ones.
@@ -782,7 +891,7 @@ export function drawPerson(
 
     const swing = moving ? Math.sin(time / 100) * 3 : 0
     const bob = moving ? Math.abs(Math.sin(time / 100)) * -1 : 0
-    const long = look.outfit !== 'kilt' // robes and dresses reach the ground
+    const long = look.outfit === 'robe' || look.outfit === 'dress' // robes and dresses reach the ground
 
     // legs (long outfits only show the feet under the hem)
     ctx.fillStyle = look.skin
@@ -801,10 +910,19 @@ export function drawPerson(
         ctx.fillStyle = look.cloth
         ctx.fillRect(-9, -21 + bob - swing / 2, 3, 5)
         ctx.fillRect(6, -21 + bob + swing / 2, 3, 5)
+    } else if (look.outfit === 'tunic') {
+        ctx.fillStyle = look.cloth                       // short sleeves
+        ctx.fillRect(-9, -21 + bob - swing / 2, 3, 3)
+        ctx.fillRect(6, -21 + bob + swing / 2, 3, 3)
+    }
+    if (look.extra === 'armbands') {
+        ctx.fillStyle = look.accent
+        ctx.fillRect(-9, -17 + bob - swing / 2, 3, 1.5)
+        ctx.fillRect(6, -17 + bob + swing / 2, 3, 1.5)
     }
 
     // body
-    if (look.outfit === 'kilt') {
+    if (look.outfit === 'kilt' || look.outfit === 'leopard') {
         ctx.fillStyle = look.skin
         ctx.fillRect(-6, -22 + bob, 12, 8) // bare chest
         ctx.fillStyle = look.cloth
@@ -812,6 +930,29 @@ export function drawPerson(
         ctx.fillStyle = look.accent
         ctx.fillRect(-6, -9 + bob, 12, 1) // gold hem
         ctx.fillRect(-5, -22 + bob, 10, 2) // gold collar
+        if (look.outfit === 'leopard') {
+            // a priest: a leopard skin worn over one shoulder
+            ctx.fillStyle = '#d8a24a'
+            ctx.beginPath()
+            ctx.moveTo(-6, -22 + bob)
+            ctx.lineTo(-1, -22 + bob)
+            ctx.lineTo(6, -12 + bob)
+            ctx.lineTo(6, -8 + bob)
+            ctx.lineTo(1, -8 + bob)
+            ctx.lineTo(-6, -17 + bob)
+            ctx.closePath()
+            ctx.fill()
+            ctx.fillStyle = '#3a2210'
+            for (const [sx, sy] of [[-4, -20], [-1, -17], [2, -14], [4, -10], [-3, -16]]) ctx.fillRect(sx, sy + bob, 1.5, 1.5)
+        }
+    } else if (look.outfit === 'tunic') {
+        ctx.fillStyle = look.cloth
+        ctx.fillRect(-6, -22 + bob, 12, 14) // tunic down to the knees
+        ctx.fillStyle = look.accent
+        ctx.fillRect(-6, -15 + bob, 12, 2) // belt
+        ctx.fillRect(-6, -9 + bob, 12, 1) // hem
+        ctx.fillStyle = look.skin
+        ctx.fillRect(-2, -22 + bob, 4, 2) // neck
     } else if (look.outfit === 'robe') {
         ctx.fillStyle = look.cloth
         ctx.fillRect(-6, -22 + bob, 12, 20) // long robe
@@ -860,18 +1001,87 @@ export function drawPerson(
         ctx.fill()
         ctx.fillStyle = look.accent
         ctx.fillRect(-5, -29 + bob, 10, 1)
-    } else if (look.hair !== 'bald') {
-        cap('#1c1410')
-        if (look.hair === 'braids') {
-            ctx.fillStyle = '#1c1410'
-            ctx.fillRect(-6, -27 + bob, 2, 9)
-            ctx.fillRect(4, -27 + bob, 2, 9)
-            ctx.fillStyle = look.accent
-            ctx.fillRect(-6, -19 + bob, 2, 2) // beads
-            ctx.fillRect(4, -19 + bob, 2, 2)
-        }
+    } else if (look.hair === 'cap') {
+        // the close-fitting cap of Kushite kings, with a band and two little cobras on the front
+        cap('#2a2018')
         ctx.fillStyle = look.accent
-        ctx.fillRect(-5, -29 + bob, 10, 2) // headband
+        ctx.fillRect(-5, -28 + bob, 10, 1.5)
+        if (!back) {
+            ctx.fillRect(-2, -32 + bob, 1.5, 3)
+            ctx.fillRect(0.5, -32 + bob, 1.5, 3)
+        }
+    } else if (look.hair !== 'bald') {
+        const hc = look.hairColor ?? '#1c1410'
+        if (look.hair === 'curly') {
+            // a round puff of curls
+            ctx.fillStyle = hc
+            ctx.beginPath()
+            if (back) ctx.arc(0, -28 + bob, 6.5, 0, Math.PI * 2)
+            else ctx.arc(0, -28.5 + bob, 6.5, Math.PI * 0.92, Math.PI * 2.08)
+            ctx.fill()
+            for (const [bx, by] of [[-5, -32], [0, -34], [5, -32]]) {
+                ctx.beginPath()
+                ctx.arc(bx, by + bob, 2.5, 0, Math.PI * 2)
+                ctx.fill()
+            }
+        } else {
+            cap(hc)
+        }
+        if (look.hair === 'braids' || look.hair === 'long') {
+            ctx.fillStyle = hc
+            const wide = look.hair === 'long' ? 3 : 2
+            ctx.fillRect(-6, -27 + bob, wide, look.hair === 'long' ? 10 : 9)
+            ctx.fillRect(6 - wide, -27 + bob, wide, look.hair === 'long' ? 10 : 9)
+            if (back && look.hair === 'long') ctx.fillRect(-5, -27 + bob, 10, 9)
+            if (look.hair === 'braids') {
+                ctx.fillStyle = look.accent
+                ctx.fillRect(-6, -19 + bob, 2, 2) // beads
+                ctx.fillRect(4, -19 + bob, 2, 2)
+            }
+        }
+        if (look.hair !== 'curly') {
+            ctx.fillStyle = look.accent
+            ctx.fillRect(-5, -29 + bob, 10, 2) // headband
+        }
+    }
+
+    // extras
+    if (look.crown) {
+        ctx.fillStyle = '#e8c75a'
+        ctx.fillRect(-5.5, -32 + bob, 11, 2.5)
+        for (const cx of [-4.5, 0, 4.5]) {
+            ctx.beginPath()
+            ctx.moveTo(cx - 1.8, -31.5 + bob)
+            ctx.lineTo(cx, -36 + bob)
+            ctx.lineTo(cx + 1.8, -31.5 + bob)
+            ctx.fill()
+        }
+        ctx.fillStyle = '#b0412e'
+        ctx.fillRect(-0.8, -31.5 + bob, 1.6, 1.6)
+    }
+    if (look.extra === 'feather') {
+        // an ostrich feather stuck in the hair, like Nubian archers wore
+        ctx.save()
+        ctx.translate(3, -33 + bob)
+        ctx.rotate(0.35)
+        ctx.fillStyle = '#f3ede0'
+        ctx.beginPath()
+        ctx.ellipse(0, -5, 2.2, 6, 0, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.fillStyle = '#9a948a'
+        ctx.fillRect(-0.4, -10, 0.8, 11)
+        ctx.restore()
+    }
+    if (look.extra === 'necklace') {
+        for (let i = -4; i <= 4; i += 2) {
+            ctx.fillStyle = i % 4 === 0 ? look.accent : '#3aa6c4'
+            ctx.fillRect(i - 0.75, -20.5 + bob + Math.abs(i) * -0.2, 1.6, 1.6)
+        }
+    }
+    if (look.extra === 'earrings' && !back) {
+        ctx.fillStyle = look.accent
+        ctx.fillRect(-5.8, -25 + bob, 1.6, 2)
+        ctx.fillRect(4.2, -25 + bob, 1.6, 2)
     }
 
     // eyes
@@ -1147,9 +1357,18 @@ export function drawTutorial(ctx: CanvasRenderingContext2D, top: number, step: n
 // Character designer options
 // ---------------------------------------------------------------------------
 export const PLAYER_SKINS = ['#5a3825', '#6b4226', '#7a4a2e', '#8d5a3b', '#a06b46', '#c28a5f']
-export const OUTFITS: Outfit[] = ['kilt', 'robe', 'dress']
-export const HAIRS: Hair[] = ['short', 'braids', 'bald', 'headwrap']
-export const CLOTH_COLORS = ['#f3ead6', '#9b2525', '#2f6fb5', '#2e7d32', '#7b3fa0', '#e0a030']
+export const OUTFITS: Outfit[] = ['kilt', 'robe', 'dress', 'tunic', 'leopard']
+export const HAIRS: Hair[] = ['short', 'braids', 'bald', 'headwrap', 'curly', 'long', 'cap']
+export const CLOTH_COLORS = ['#f3ead6', '#9b2525', '#2f6fb5', '#2e7d32', '#7b3fa0', '#e0a030', '#b5654a', '#3aa6c4', '#2a2a2a']
+export const HAIR_COLORS: [string, string][] = [['Black', '#1c1410'], ['Brown', '#4a2e1c'], ['Gray', '#9a948a']]
+export const TRIM_COLORS: [string, string][] = [['Gold', '#d4a82a'], ['Silver', '#c0c4c8'], ['Red', '#b0412e'], ['Turquoise', '#3aa6a0'], ['White', '#f3ead6']]
+export const EXTRAS = ['none', 'necklace', 'earrings', 'armbands', 'feather']
+// how each choice is called in the character creator
+export const LOOK_NAMES: Record<string, string> = {
+    kilt: 'Kilt', robe: 'Robe', dress: 'Dress', tunic: 'Tunic', leopard: 'Priest',
+    short: 'Short', braids: 'Braids', bald: 'Bald', headwrap: 'Headwrap', curly: 'Curly', long: 'Long', cap: 'Kushite cap',
+    none: 'None', necklace: 'Necklace', earrings: 'Earrings', armbands: 'Armbands', feather: 'Feather',
+}
 
 // ---------------------------------------------------------------------------
 // Name tags, quest markers and items on the ground (drawn inside the camera)
@@ -1554,6 +1773,30 @@ export function drawItem(ctx: CanvasRenderingContext2D, x: number, y: number, co
             oval(12, 17, 2, 3, -0.4, 'rgba(255, 255, 255, 0.25)')
             break
 
+        case 'water-jar':
+            circle(16, 19, 8, color)
+            rect(12, 7, 8, 6, dark)
+            rect(11, 6, 10, 2, light)
+            oval(12, 17, 2, 3, -0.3, 'rgba(255, 255, 255, 0.3)')
+            line([9, 23, 23, 23], dark, 1)
+            break
+        case 'faience-amulet':
+            line([16, 4, 16, 9], '#c9a227', 1.5)
+            oval(16, 17, 6, 8, 0, color)
+            oval(14, 14, 2, 3, -0.3, 'rgba(255, 255, 255, 0.5)')
+            rect(14, 15, 4, 6, dark)              // a little figure of a god
+            circle(16, 13, 2, dark)
+            break
+        case 'archer-bow':
+            ctx.strokeStyle = color
+            ctx.lineWidth = 2.5
+            ctx.beginPath()
+            ctx.arc(8, 16, 13, -1.1, 1.1)
+            ctx.stroke()
+            line([13, 4, 13, 28], '#e8e0d0', 1)   // the string
+            line([6, 16, 27, 16], '#6b4226', 1.5) // an arrow
+            shape([27, 16, 23, 13, 23, 19], '#8a8f98')
+            break
         default: {
             // anything else: a lumpy rock in the item's color
             shape([8, 24, 11, 15, 19, 12, 25, 19, 23, 25], color)
@@ -1719,36 +1962,122 @@ function drawCenterPanel(ctx: CanvasRenderingContext2D, w: number, h: number, pw
     return { px, py }
 }
 
-// The How to Play screen (shown after the title screen)
-export function drawHowToPlay(ctx: CanvasRenderingContext2D, w: number, h: number) {
-    ctx.save()
-    const pw = Math.min(720, w - 40)
-    const ph = Math.min(470, h - 40)
-    const { px, py } = drawCenterPanel(ctx, w, h, pw, ph, 'HOW TO PLAY')
+// The How to Play pages: each tab is a list of rows. A row with a key is drawn as "KEY   what it does";
+// a row with an empty key is a plain paragraph.
+const HOWTO_TABS: { name: string; rows: [string, string][] }[] = [
+    {
+        name: 'CONTROLS',
+        rows: [
+            ['WASD / ARROWS', 'Walk around. Hold SHIFT to run (it uses stamina, shown above the hotbar).'],
+            ['E', 'Use whatever is closest: talk, pick up, open a chest, use a workshop or a building plot.'],
+            ['I', 'Inventory. Click to pick up and put down, right-click for half or one, shift-click to move a stack.'],
+            ['Q', 'Drop one item (from your hotbar, or the one under the mouse in the inventory).'],
+            ['1 - 9 / WHEEL', 'Choose a hotbar slot.'],
+            ['M', 'The World Map. Click it to set a waypoint: gold arrows on the ground lead you there.'],
+            ['C', 'The Codex, with pages about Kush and the lands around it.'],
+            ['ESC', 'Close a window, or open the pause menu (with Settings and Save).'],
+        ],
+    },
+    {
+        name: 'GOAL',
+        rows: [
+            ['', 'You are a traveler in the Kingdom of Kush, in what is now Sudan. Its capital, Meroë, was once one of the great cities of Africa, famous for its pyramids, its temples and its iron.'],
+            ['', 'Your job is to build the capital back up. On the big paved plaza east of the village are 7 building plots, marked with gold outlines.'],
+            ['', 'Gather materials, turn them into building parts at the workshops, and raise all 7 buildings. The gold diamonds in the top-right corner show how many are done.'],
+            ['', 'When the last building goes up, the capital is complete and you win. Along the way, the villagers and the Codex teach you the real history of Kush.'],
+        ],
+    },
+    {
+        name: 'GATHER & CRAFT',
+        rows: [
+            ['MATERIALS', 'Things to gather lie on the ground all over the land. Walk up to one and press E.'],
+            ['WHERE', 'Sandstone near the pyramids of Meroë, iron ore by the slag heaps west of the village, wood around Napata, clay around Kerma, gold around Napata, granite and incense in Aksum, ivory on the Red Sea coast.'],
+            ['STONEWORKS', '1 sandstone makes 2 cut sandstone.'],
+            ['BRICKYARD', '1 clay makes 2 mud bricks.'],
+            ['GOLDSMITH', '1 gold nugget makes 2 gold leaf.'],
+            ['FURNACE', 'Put iron ore in the top slot and wood in the bottom slot. Wait for the arrow to fill, then take the iron bar.'],
+            ['KILN', 'Bread, cakes and pottery. Nice to have, but not needed for the buildings.'],
+        ],
+    },
+    {
+        name: 'BUILD',
+        rows: [
+            ['', 'Walk up to a gold outline on the plaza and press E. A window shows what the building needs, and how much of it you have.'],
+            ['', 'When every line is green, click BUILD. The building rises from the ground, and you learn a fact about the real one.'],
+            ['TIP', 'Recipes marked FOR THE CAPITAL in a workshop make parts the buildings need. Start with the Hafir (only cut sandstone) and the houses (only mud bricks).'],
+            ['TIP', 'Iron bars for the Ironworks come from the furnace. Gold leaf for the Temple and the Royal Enclosure comes from the goldsmith.'],
+        ],
+    },
+    {
+        name: 'QUESTS & CODEX',
+        rows: [
+            ['!', 'A villager with a gold ! has a quest for you. Press E to talk.'],
+            ['?', 'A gold ? means you have what they asked for. Talk to them to hand it in.'],
+            ['REWARDS', 'Every quest gives you building materials, so quests help you build the capital faster.'],
+            ['CHESTS', 'Chests are hidden all over the land. Some hold relics that unlock pages in the Codex.'],
+            ['CODEX', 'Press C. One tab is about Kush itself, the other about the lands around it: Egypt, Assyria, Persia, Greece, Rome and Aksum.'],
+            ['MAP', 'Press M. Gold diamonds show where your quests lead.'],
+        ],
+    },
+]
+export const HOWTO_TAB_COUNT = HOWTO_TABS.length
 
-    const lines: [string, string][] = [
-        ['WASD / ARROWS', 'Walk around. Hold SHIFT to sprint (it uses stamina).'],
-        ['E', 'Talk to villagers, pick things up, open chests, use the stations and the building plots in Meroë.'],
-        ['I', 'Inventory. Click to pick up and put down, right-click for half or one, shift-click to move, Q to drop.'],
-        ['1 - 9 / WHEEL', 'Choose a hotbar slot.'],
-        ['ESC', 'Close a window, or open the pause menu. The game also saves by itself every few seconds.'],
-        ['M', 'Map. Gold markers show where your quests lead.'],
-        ['C', 'Codex. Find relics in chests and craft goods to unlock pages about Kush and its neighbors.'],
-        ['GOAL', 'Gather materials, craft them at the stations, and build up the capital, Meroë. Quests teach you the history of Kush.'],
-    ]
-    const rowH = Math.min(52, (ph - 150) / lines.length)
-    ctx.textBaseline = 'middle'
-    lines.forEach(([key, text], i) => {
-        const y = py + 84 + i * rowH
-        ctx.textAlign = 'left'
-        ctx.font = `700 13px ${FONT_TITLE}`
-        ctx.fillStyle = '#e8c75a'
-        ctx.fillText(key, px + 28, y)
+// The How to Play screen, with tabs
+export function drawHowToPlay(ctx: CanvasRenderingContext2D, w: number, h: number, tab: number) {
+    ctx.save()
+    const pw = Math.min(820, w - 40)
+    const ph = Math.min(560, h - 40)
+    const { px, py } = drawCenterPanel(ctx, w, h, pw, ph, 'HOW TO PLAY')
+    addButton('panel', px, py, pw, ph)
+
+    // the tabs
+    const tw = (pw - 48) / HOWTO_TABS.length
+    HOWTO_TABS.forEach((t, i) => {
+        const tx = px + 24 + i * tw
+        const ty = py + 62
+        const on = i === tab
+        ctx.fillStyle = on ? '#e8c75a' : hovering(tx + 2, ty, tw - 4, 30) ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.05)'
+        ctx.beginPath()
+        ctx.roundRect(tx + 2, ty, tw - 4, 30, 15)
+        ctx.fill()
+        ctx.strokeStyle = 'rgba(201, 162, 39, 0.6)'
+        ctx.lineWidth = 1
+        ctx.stroke()
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.font = `700 ${tw < 140 ? 10 : 12}px ${FONT_TITLE}`
+        ctx.fillStyle = on ? '#1a110a' : '#e8c75a'
+        ctx.fillText(t.name, tx + tw / 2, ty + 15)
+        addButton('howto-tab-' + i, tx + 2, ty, tw - 4, 30)
+    })
+
+    // the page
+    const rows = HOWTO_TABS[tab].rows
+    const keyW = rows.some(r => r[0]) ? 150 : 0
+    const textX = px + 32 + keyW
+    const textW = pw - 64 - keyW
+    let y = py + 122
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'alphabetic'
+    for (const [key, text] of rows) {
+        ctx.font = `600 18px ${FONT_BODY}`
+        const lines = wrapText(ctx, text, key ? textW : pw - 64)
+        if (key) {
+            ctx.font = `700 13px ${FONT_TITLE}`
+            ctx.fillStyle = '#e8c75a'
+            ctx.fillText(key, px + 32, y)
+        }
         ctx.font = `600 18px ${FONT_BODY}`
         ctx.fillStyle = '#f3ead6'
-        const wrapped = wrapText(ctx, text, pw - 230)
-        wrapped.forEach((l, j) => ctx.fillText(l, px + 190, y + (j - (wrapped.length - 1) / 2) * 18))
-    })
+        lines.forEach((l, i) => ctx.fillText(l, key ? textX : px + 32, y + i * 22))
+        y += lines.length * 22 + (key ? 12 : 16)
+    }
+
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `700 11px ${FONT_TITLE}`
+    ctx.fillStyle = '#c9b98a'
+    ctx.fillText('LEFT / RIGHT: CHANGE TAB', w / 2, py + ph - 72)
     drawPillButton(ctx, 'howto-continue', 'CONTINUE  (OR PRESS ENTER)', w / 2, py + ph - 38, 320, 44)
     ctx.restore()
 }
@@ -1757,8 +2086,13 @@ export function drawHowToPlay(ctx: CanvasRenderingContext2D, w: number, h: numbe
 export function drawEnding(ctx: CanvasRenderingContext2D, w: number, h: number, name: string, stats: string[], time: number) {
     ctx.save()
     const pw = Math.min(720, w - 40)
-    const ph = Math.min(460, h - 40)
+    const ph = Math.min(520, h - 40)
     const { py } = drawCenterPanel(ctx, w, h, pw, ph, 'THE RISE OF MEROË')
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `700 13px ${FONT_TITLE}`
+    ctx.fillStyle = '#f6dc82'
+    ctx.fillText('YOU ARE NOW: BUILDER OF MEROË', w / 2, py + 66)
 
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
@@ -1766,11 +2100,12 @@ export function drawEnding(ctx: CanvasRenderingContext2D, w: number, h: number, 
     ctx.fillStyle = '#f3ead6'
     const story = `Well done, ${name}! You gathered, crafted and built until the great city of Meroë stood again, with its temple, its pyramids, its ironworks and the palace of the Kandake. For hundreds of years it was the capital of a rich and powerful kingdom, and its pyramids, iron and gold are still remembered today.`
     const lines = wrapText(ctx, story, pw - 80)
-    lines.forEach((l, i) => ctx.fillText(l, w / 2, py + 100 + i * 28))
+    lines.forEach((l, i) => ctx.fillText(l, w / 2, py + 104 + i * 28))
 
-    ctx.font = `700 14px ${FONT_TITLE}`
+    ctx.font = `700 13px ${FONT_TITLE}`
     ctx.fillStyle = '#e8c75a'
-    stats.forEach((s, i) => ctx.fillText(s.toUpperCase(), w / 2, py + 100 + lines.length * 28 + 34 + i * 24))
+    // the stats in two columns
+    stats.forEach((s, i) => ctx.fillText(s.toUpperCase(), w / 2 + (i % 2 ? 130 : -130), py + 104 + lines.length * 28 + 30 + Math.floor(i / 2) * 24))
 
     diamond(ctx, w / 2, py + ph - 88, 6 + Math.sin(time / 400) * 1.5)
     drawPillButton(ctx, 'ending-continue', 'KEEP EXPLORING', w / 2, py + ph - 42, 280, 44)
@@ -1815,7 +2150,7 @@ export function drawDesigner(
     ctx.fillRect(0, 0, w, h)
 
     const pw = Math.min(780, w - 40)
-    const ph = Math.min(440, h - 40)
+    const ph = Math.min(540, h - 40)
     const px = (w - pw) / 2
     const py = (h - ph) / 2
 
@@ -2351,284 +2686,518 @@ export function drawAnimal(ctx: CanvasRenderingContext2D, x: number, y: number, 
 }
 
 // --- Codex pictures --------------------------------------------------------
-// A small framed picture for each Codex page. `locked` draws it as a dark silhouette.
+// A small painted scene for each Codex page. `locked` hides it behind a dark "?".
 export function drawCodexPicture(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, id: string, locked: boolean, time: number) {
     ctx.save()
     ctx.beginPath()
     ctx.roundRect(x, y, w, h, 6)
     ctx.clip()
+    ctx.translate(x, y)
 
-    // sky and ground
-    const sky = ctx.createLinearGradient(0, y, 0, y + h)
-    sky.addColorStop(0, '#f2c27a')
-    sky.addColorStop(0.6, '#f7dca6')
-    ctx.fillStyle = sky
-    ctx.fillRect(x, y, w, h)
-    ctx.fillStyle = '#e8c27e'
-    ctx.fillRect(x, y + h * 0.72, w, h * 0.28)
-    ctx.fillStyle = 'rgba(255, 244, 200, 0.9)'
-    ctx.beginPath()
-    ctx.arc(x + w * 0.82, y + h * 0.22, 12, 0, Math.PI * 2)    // the sun
-    ctx.fill()
+    // every picture is drawn on a 230 x 166 canvas and scaled to fit
+    const s = Math.min(w / 230, h / 166)
+    ctx.scale(s, s)
+    const W = 230
+    const H = 166
+    const GROUND = 118   // where the land meets the sky
 
-    const gx = x + w / 2          // the middle of the ground line
-    const gy = y + h * 0.74
-    const sand = '#d6b57a'
-    const sandDark = '#a97f4a'
-    const tri = (cx: number, base: number, half: number, tall: number, c1: string, c2: string) => {
-        ctx.fillStyle = c1
+    const rect = (rx: number, ry: number, rw: number, rh: number, c: string) => {
+        ctx.fillStyle = c
+        ctx.fillRect(rx, ry, rw, rh)
+    }
+    const poly = (pts: number[], c: string) => {
+        ctx.fillStyle = c
         ctx.beginPath()
-        ctx.moveTo(cx - half, base)
-        ctx.lineTo(cx, base - tall)
-        ctx.lineTo(cx + half, base)
-        ctx.fill()
-        ctx.fillStyle = c2
-        ctx.beginPath()
-        ctx.moveTo(cx, base - tall)
-        ctx.lineTo(cx + half, base)
-        ctx.lineTo(cx + half * 0.15, base)
+        ctx.moveTo(pts[0], pts[1])
+        for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1])
+        ctx.closePath()
         ctx.fill()
     }
+    const circle = (cx: number, cy: number, r: number, c: string) => {
+        ctx.fillStyle = c
+        ctx.beginPath()
+        ctx.arc(cx, cy, r, 0, Math.PI * 2)
+        ctx.fill()
+    }
+    const outline = (c = 'rgba(40, 24, 10, 0.55)', width = 1.5) => {
+        ctx.strokeStyle = c
+        ctx.lineWidth = width
+        ctx.stroke()
+    }
+    const palm = (px: number, py: number, tall: number) => {
+        ctx.strokeStyle = '#7a5230'
+        ctx.lineWidth = 3
+        ctx.beginPath()
+        ctx.moveTo(px, py)
+        ctx.quadraticCurveTo(px + 4, py - tall / 2, px + 2, py - tall)
+        ctx.stroke()
+        for (let i = 0; i < 6; i++) {
+            ctx.save()
+            ctx.translate(px + 2, py - tall)
+            ctx.rotate(-2.6 + i * 0.85 + Math.sin(time / 900 + i) * 0.05)
+            ctx.fillStyle = i % 2 ? '#3f6b26' : '#5a8a32'
+            ctx.beginPath()
+            ctx.ellipse(11, 0, 12, 3, 0.25, 0, Math.PI * 2)
+            ctx.fill()
+            ctx.restore()
+        }
+    }
+    // a steep Kushite pyramid with stepped courses, lit from the left
+    const pyramid = (cx: number, base: number, half: number, tall: number) => {
+        poly([cx - half, base, cx, base - tall, cx + half, base], '#e2c48c')
+        poly([cx, base - tall, cx + half, base, cx + half * 0.1, base], '#b38a52')
+        ctx.fillStyle = 'rgba(120, 85, 40, 0.3)'
+        for (let k = 1; k < 9; k++) {
+            const yy = base - (tall * k) / 9
+            const hw = half * (1 - k / 9)
+            ctx.fillRect(cx - hw, yy, hw * 2, 1)
+        }
+        // the chapel at the front
+        rect(cx - half * 0.35, base - 14, half * 0.7, 14, '#c9a46a')
+        rect(cx - 3, base - 10, 6, 10, '#4a3218')
+    }
+
+    // ---- the background: sky, sun, far dunes, near ground ----
+    const night = id === 'apedemak' || id === 'script'   // a couple of pictures are inside temples: warmer and darker
+    const sky = ctx.createLinearGradient(0, 0, 0, GROUND)
+    sky.addColorStop(0, night ? '#6b3a22' : '#f0b46a')
+    sky.addColorStop(1, night ? '#c07a42' : '#fbe4b0')
+    ctx.fillStyle = sky
+    ctx.fillRect(0, 0, W, GROUND)
+    if (!night) {
+        const glow = ctx.createRadialGradient(182, 34, 4, 182, 34, 44)
+        glow.addColorStop(0, 'rgba(255, 250, 220, 1)')
+        glow.addColorStop(0.3, 'rgba(255, 240, 190, 0.8)')
+        glow.addColorStop(1, 'rgba(255, 230, 170, 0)')
+        ctx.fillStyle = glow
+        ctx.fillRect(130, 0, 100, 90)
+        // two birds
+        ctx.strokeStyle = 'rgba(80, 50, 30, 0.6)'
+        ctx.lineWidth = 1.2
+        for (const [bx, by] of [[60, 26], [74, 34]]) {
+            const flap = Math.sin(time / 200 + bx) * 2
+            ctx.beginPath()
+            ctx.moveTo(bx - 5, by - flap)
+            ctx.quadraticCurveTo(bx - 2, by - 3, bx, by)
+            ctx.quadraticCurveTo(bx + 2, by - 3, bx + 5, by - flap)
+            ctx.stroke()
+        }
+    }
+    // far dunes, then nearer dunes
+    ctx.fillStyle = night ? '#a8683a' : '#e8c28a'
+    ctx.beginPath()
+    ctx.moveTo(0, GROUND - 14)
+    ctx.quadraticCurveTo(50, GROUND - 34, 100, GROUND - 16)
+    ctx.quadraticCurveTo(160, GROUND - 4, 230, GROUND - 26)
+    ctx.lineTo(W, GROUND)
+    ctx.lineTo(0, GROUND)
+    ctx.fill()
+    const ground = ctx.createLinearGradient(0, GROUND - 8, 0, H)
+    ground.addColorStop(0, night ? '#9a5e34' : '#e2b87a')
+    ground.addColorStop(1, night ? '#6e3e22' : '#c89a5c')
+    ctx.fillStyle = ground
+    ctx.beginPath()
+    ctx.moveTo(0, GROUND)
+    ctx.quadraticCurveTo(80, GROUND - 8, 160, GROUND + 2)
+    ctx.quadraticCurveTo(200, GROUND + 6, 230, GROUND - 2)
+    ctx.lineTo(W, H)
+    ctx.lineTo(0, H)
+    ctx.fill()
+    ctx.fillStyle = 'rgba(120, 80, 40, 0.18)'                 // little ripples in the sand
+    for (let i = 0; i < 14; i++) ctx.fillRect((i * 37) % W, GROUND + 14 + ((i * 23) % 30), 10, 1.5)
 
     switch (id) {
         case 'kerma': {
-            // the Western Deffufa: a huge mud-brick temple, with a black-topped Kerma beaker in front
-            ctx.fillStyle = '#a8683f'
-            ctx.fillRect(gx - 60, gy - 52, 90, 52)
-            ctx.fillStyle = '#8a5230'
-            ctx.fillRect(gx - 60, gy - 52, 90, 6)
-            ctx.fillRect(gx - 20, gy - 70, 26, 20)
-            ctx.fillStyle = '#3a2216'
-            ctx.fillRect(gx - 22, gy - 24, 12, 24)
-            ctx.fillStyle = '#9a3a24'                                  // beaker: red body...
+            // the Western Deffufa, a huge mud-brick temple, with a black-topped beaker in front
+            rect(34, 44, 116, 76, '#a8683f')
+            rect(34, 44, 116, 8, '#c27c4c')
+            rect(138, 52, 12, 68, '#8a5230')
+            rect(70, 22, 40, 26, '#b47044')
+            rect(70, 22, 40, 5, '#c98858')
+            ctx.fillStyle = 'rgba(70, 35, 15, 0.35)'
+            for (let k = 0; k < 6; k++) ctx.fillRect(40, 62 + k * 10, 96, 1.5)
+            rect(84, 88, 16, 32, '#3a2216')
             ctx.beginPath()
-            ctx.moveTo(gx + 44, gy - 34)
-            ctx.lineTo(gx + 64, gy - 34)
-            ctx.lineTo(gx + 58, gy)
-            ctx.lineTo(gx + 50, gy)
+            ctx.arc(92, 88, 8, Math.PI, 0)
             ctx.fill()
-            ctx.fillStyle = '#1a110a'                                  // ...and a shiny black top
-            ctx.fillRect(gx + 44, gy - 36, 20, 9)
+            // the beaker
+            poly([166, 96, 194, 96, 186, 140, 174, 140], '#9a3a24')
+            poly([166, 96, 194, 96, 192, 106, 168, 106], '#1a110a')
+            ctx.beginPath()
+            ctx.moveTo(166, 96)
+            ctx.lineTo(194, 96)
+            ctx.lineTo(186, 140)
+            ctx.lineTo(174, 140)
+            ctx.closePath()
+            outline()
+            rect(170, 99, 8, 2, 'rgba(255, 255, 255, 0.5)')
+            palm(18, 128, 50)
             break
         }
         case 'pharaohs': {
-            // a Kushite king's double-crown with two cobras, in front of Jebel Barkal
-            ctx.fillStyle = '#c9905a'
-            ctx.fillRect(x, gy - 46, w * 0.42, 46)
-            ctx.fillRect(x + w * 0.3, gy - 70, 14, 30)                // the pinnacle
-            ctx.fillStyle = '#1c1410'
+            // Jebel Barkal, the holy mountain, behind a Kushite king wearing the cap crown with two cobras
+            poly([0, GROUND, 10, 56, 70, 50, 84, GROUND], '#b8784a')
+            poly([60, 52, 66, 20, 76, 22, 74, 54], '#a8683a')       // the pinnacle
+            poly([60, 52, 70, 50, 84, GROUND, 70, GROUND], 'rgba(0, 0, 0, 0.15)')
+            // the king, from the chest up
+            ctx.fillStyle = '#e8d4a2'
             ctx.beginPath()
-            ctx.roundRect(gx + 8, gy - 64, 40, 40, 12)                // a close-fitting cap crown
+            ctx.moveTo(100, H)
+            ctx.quadraticCurveTo(102, 112, 150, 108)
+            ctx.quadraticCurveTo(198, 112, 200, H)
             ctx.fill()
-            ctx.fillStyle = '#e8c75a'
-            ctx.fillRect(gx + 6, gy - 32, 44, 6)                      // gold band
-            ctx.fillRect(gx + 18, gy - 72, 5, 10)                     // two cobras on the front
-            ctx.fillRect(gx + 30, gy - 72, 5, 10)
-            ctx.fillStyle = '#8a5a3b'
-            ctx.fillRect(gx + 14, gy - 26, 30, 26)                    // the king's face and neck
-            ctx.fillStyle = '#1c1410'
-            ctx.fillRect(gx + 34, gy - 18, 3, 3)
+            ctx.fillStyle = '#c9a227'                                 // broad gold collar
+            ctx.beginPath()
+            ctx.ellipse(150, 116, 34, 12, 0, 0, Math.PI)
+            ctx.fill()
+            rect(138, 92, 24, 22, '#7a4a2b')                          // neck and face
+            circle(150, 78, 22, '#8a5a3b')
+            ctx.fillStyle = '#1c1410'                                 // the cap crown
+            ctx.beginPath()
+            ctx.arc(150, 74, 24, Math.PI * 1.02, Math.PI * 1.98)
+            ctx.lineTo(174, 80)
+            ctx.lineTo(126, 80)
+            ctx.fill()
+            rect(126, 74, 48, 6, '#c9a227')                           // gold band
+            for (const cx of [143, 157]) {                            // two cobras
+                rect(cx - 2, 50, 4, 14, '#c9a227')
+                circle(cx, 49, 3.5, '#c9a227')
+            }
+            rect(158, 80, 6, 3, '#1c1410')                            // eye
+            rect(160, 94, 6, 2, '#5a3020')                            // mouth
             break
         }
         case 'meroe': {
-            // the steep pyramids of Meroë, with a chapel at the front of each
-            tri(gx - 50, gy, 20, 64, sand, sandDark)
-            tri(gx, gy, 24, 80, sand, sandDark)
-            tri(gx + 52, gy, 18, 58, sand, sandDark)
-            ctx.fillStyle = '#b8955f'
-            for (const [cx, cw] of [[gx - 50, 14], [gx, 18], [gx + 52, 12]]) ctx.fillRect(cx - cw / 2, gy - 12, cw, 12)
-            ctx.fillStyle = '#3a2a1a'
-            for (const cx of [gx - 50, gx, gx + 52]) ctx.fillRect(cx - 2, gy - 8, 4, 8)
+            // the royal cemetery of Meroë: rows of steep pyramids on a ridge, with palms by the river
+            rect(0, GROUND + 22, W, 10, '#4f9ac0')                    // a glimpse of the Nile
+            rect(0, GROUND + 22, W, 2, '#8cc8e0')
+            pyramid(46, GROUND + 10, 18, 70)
+            pyramid(92, GROUND + 6, 22, 90)
+            pyramid(140, GROUND + 8, 20, 78)
+            pyramid(184, GROUND + 12, 16, 60)
+            palm(16, GROUND + 26, 40)
+            palm(212, GROUND + 26, 46)
             break
         }
         case 'kandake': {
-            // a queen in a tall crown, holding a spear
-            ctx.fillStyle = '#6b4226'
-            ctx.fillRect(gx - 3, gy - 92, 4, 92)                      // spear
-            ctx.fillStyle = '#c0c4c8'
+            // a Kandake (queen) in a tall crown, with a spear and a long robe, in front of a temple wall
+            rect(0, 30, W, 90, '#d6b98a')
+            ctx.fillStyle = 'rgba(110, 75, 35, 0.3)'
+            for (let k = 0; k < 8; k++) ctx.fillRect(0, 40 + k * 10, W, 1)
+            rect(150, 14, 4, 140, '#6b4226')                          // spear
+            poly([146, 16, 152, 0, 158, 16], '#c0c4c8')
+            ctx.fillStyle = '#7a2a5a'                                 // robe
             ctx.beginPath()
-            ctx.moveTo(gx - 6, gy - 92)
-            ctx.lineTo(gx - 1, gy - 106)
-            ctx.lineTo(gx + 4, gy - 92)
+            ctx.moveTo(98, 72)
+            ctx.lineTo(142, 72)
+            ctx.lineTo(158, H)
+            ctx.lineTo(82, H)
+            ctx.closePath()
             ctx.fill()
-            ctx.fillStyle = '#7a2a5a'
+            outline()
+            rect(92, 108, 56, 6, '#c9a227')                           // sash
+            ctx.fillStyle = '#c9a227'                                 // collar
             ctx.beginPath()
-            ctx.moveTo(gx + 10, gy - 52)
-            ctx.lineTo(gx + 40, gy - 52)
-            ctx.lineTo(gx + 50, gy)
-            ctx.lineTo(gx, gy)
-            ctx.fill()                                                // robe
-            ctx.fillStyle = '#e8c75a'
-            ctx.fillRect(gx + 8, gy - 30, 34, 4)                      // sash
-            ctx.fillStyle = '#6b4226'
-            ctx.beginPath()
-            ctx.arc(gx + 25, gy - 62, 10, 0, Math.PI * 2)             // head
+            ctx.ellipse(120, 74, 24, 8, 0, 0, Math.PI)
             ctx.fill()
-            ctx.fillStyle = '#e8c75a'
-            ctx.fillRect(gx + 15, gy - 84, 20, 16)                    // crown
-            ctx.fillRect(gx + 22, gy - 92, 6, 8)
+            rect(114, 56, 12, 16, '#6b4226')
+            circle(120, 48, 15, '#7a4a2b')                            // head
+            rect(105, 18, 30, 22, '#c9a227')                          // crown
+            rect(112, 6, 16, 14, '#e8c75a')
+            circle(120, 6, 5, '#b0412e')
+            rect(126, 46, 5, 3, '#1c1410')
+            rect(140, 80, 10, 6, '#7a4a2b')                           // hand on the spear
             break
         }
         case 'script': {
-            // a stone tablet carved with signs
+            // a carved offering table / stone tablet, lit by a lamp inside a temple
+            rect(0, 0, W, GROUND, 'rgba(60, 30, 15, 0.35)')
             ctx.fillStyle = '#b8a27a'
             ctx.beginPath()
-            ctx.roundRect(gx - 50, gy - 92, 100, 92, [30, 30, 2, 2])
+            ctx.roundRect(60, 20, 110, 120, [50, 50, 4, 4])
             ctx.fill()
-            ctx.fillStyle = '#6b5a3a'
-            for (let r = 0; r < 5; r++) {
+            outline('rgba(60, 40, 20, 0.6)', 2)
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.15)'
+            ctx.fillRect(66, 40, 6, 90)
+            ctx.fillStyle = '#5e4a2e'
+            for (let r = 0; r < 7; r++) {
                 for (let c = 0; c < 6; c++) {
-                    const sx = gx - 38 + c * 14
-                    const sy = gy - 70 + r * 14
-                    const k = (r * 7 + c * 3) % 4                       // a few different signs
+                    const sx = 76 + c * 14
+                    const sy = 46 + r * 13
+                    const k = (r * 5 + c * 3) % 5
                     if (k === 0) ctx.fillRect(sx, sy, 3, 9)
                     else if (k === 1) ctx.fillRect(sx, sy + 3, 9, 3)
                     else if (k === 2) { ctx.beginPath(); ctx.arc(sx + 4, sy + 4, 3.5, 0, Math.PI * 2); ctx.fill() }
-                    else { ctx.fillRect(sx, sy, 3, 9); ctx.fillRect(sx, sy, 8, 3) }
+                    else if (k === 3) { ctx.fillRect(sx, sy, 3, 9); ctx.fillRect(sx, sy, 8, 3) }
+                    else { ctx.beginPath(); ctx.moveTo(sx, sy + 9); ctx.lineTo(sx + 4, sy); ctx.lineTo(sx + 8, sy + 9); ctx.fill() }
                 }
             }
+            // an oil lamp with a flickering flame
+            poly([180, 140, 206, 140, 200, 130, 186, 130], '#8a5a3a')
+            const fl = Math.sin(time / 90) * 2
+            circle(193, 124 - fl / 2, 5 + fl / 3, '#ffb040')
+            circle(193, 126, 2.5, '#fff0b0')
+            const lampGlow = ctx.createRadialGradient(193, 124, 2, 193, 124, 60)
+            lampGlow.addColorStop(0, 'rgba(255, 190, 90, 0.35)')
+            lampGlow.addColorStop(1, 'rgba(255, 190, 90, 0)')
+            ctx.fillStyle = lampGlow
+            ctx.fillRect(130, 64, 100, 102)
             break
         }
         case 'apedemak': {
-            // the lion-headed god's face
-            ctx.fillStyle = '#b8702a'
+            // Apedemak: a lion-headed god with a crown, carved on a temple wall at Naqa
+            rect(0, 0, W, H, 'rgba(70, 35, 15, 0.25)')
+            ctx.fillStyle = '#d8b07a'
             ctx.beginPath()
-            ctx.arc(gx, gy - 48, 42, 0, Math.PI * 2)                  // mane
+            ctx.roundRect(40, 10, 150, 150, 8)
             ctx.fill()
-            ctx.fillStyle = '#e0a050'
+            ctx.fillStyle = 'rgba(110, 70, 30, 0.25)'
+            for (let k = 0; k < 14; k++) ctx.fillRect(40, 18 + k * 10, 150, 1)
+            // the mane, as rays
+            ctx.fillStyle = '#b06a28'
+            for (let i = 0; i < 16; i++) {
+                const a = (i / 16) * Math.PI * 2
+                ctx.beginPath()
+                ctx.moveTo(115 + Math.cos(a) * 20, 88 + Math.sin(a) * 20)
+                ctx.lineTo(115 + Math.cos(a + 0.2) * 48, 88 + Math.sin(a + 0.2) * 48)
+                ctx.lineTo(115 + Math.cos(a + 0.4) * 20, 88 + Math.sin(a + 0.4) * 20)
+                ctx.fill()
+            }
+            circle(115, 88, 36, '#c27a34')
+            circle(115, 92, 26, '#e0a050')                            // face
+            circle(104, 84, 4, '#1c1410')
+            circle(126, 84, 4, '#1c1410')
+            circle(105, 83, 1.2, '#fff')
+            circle(127, 83, 1.2, '#fff')
+            poly([108, 98, 122, 98, 115, 106], '#5a2a14')             // nose
+            ctx.strokeStyle = '#5a2a14'
+            ctx.lineWidth = 2
             ctx.beginPath()
-            ctx.arc(gx, gy - 46, 28, 0, Math.PI * 2)                  // face
-            ctx.fill()
-            ctx.fillStyle = '#1c1410'
-            ctx.fillRect(gx - 14, gy - 54, 7, 5)
-            ctx.fillRect(gx + 7, gy - 54, 7, 5)
-            ctx.beginPath()
-            ctx.moveTo(gx - 6, gy - 40)
-            ctx.lineTo(gx + 6, gy - 40)
-            ctx.lineTo(gx, gy - 33)
-            ctx.fill()
-            ctx.fillStyle = '#e8c75a'
-            ctx.fillRect(gx - 20, gy - 96, 40, 10)                    // crown
+            ctx.moveTo(115, 106)
+            ctx.quadraticCurveTo(108, 112, 102, 108)
+            ctx.moveTo(115, 106)
+            ctx.quadraticCurveTo(122, 112, 128, 108)
+            ctx.stroke()
+            // the double crown on top
+            poly([98, 52, 132, 52, 128, 30, 102, 30], '#e8c75a')
+            rect(110, 14, 10, 18, '#e8d4a2')
+            circle(115, 12, 5, '#b0412e')
             break
         }
         case 'iron': {
-            // a furnace with fire, and iron bars
-            ctx.fillStyle = '#6b4a3a'
+            // an iron furnace with leather bellows, smoke rising, a slag heap and finished iron bars
+            ctx.fillStyle = '#7a4a32'
             ctx.beginPath()
-            ctx.moveTo(gx - 50, gy)
-            ctx.lineTo(gx - 40, gy - 70)
-            ctx.lineTo(gx - 10, gy - 70)
-            ctx.lineTo(gx, gy)
+            ctx.moveTo(40, GROUND + 22)
+            ctx.lineTo(56, 40)
+            ctx.lineTo(90, 40)
+            ctx.lineTo(106, GROUND + 22)
+            ctx.closePath()
             ctx.fill()
-            ctx.fillStyle = '#1a110a'
-            ctx.fillRect(gx - 34, gy - 22, 18, 22)
+            outline()
+            poly([78, 40, 90, 40, 106, GROUND + 22, 90, GROUND + 22], '#5e3624')
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)'
+            for (let k = 0; k < 6; k++) ctx.fillRect(50, 56 + k * 14, 50, 1.5)
+            ctx.fillStyle = '#1a0d06'
+            ctx.beginPath()
+            ctx.arc(73, GROUND + 22, 16, Math.PI, 0)
+            ctx.fill()
             const f = Math.sin(time / 90) * 3
             ctx.fillStyle = '#ff9a3c'
-            ctx.fillRect(gx - 31, gy - 16 - f, 12, 16 + f)
-            ctx.fillStyle = 'rgba(200, 200, 200, 0.5)'
             ctx.beginPath()
-            ctx.arc(gx - 25, gy - 82 - ((time / 50) % 12), 7, 0, Math.PI * 2)
+            ctx.arc(73, GROUND + 22, 11 + f / 2, Math.PI, 0)
             ctx.fill()
-            ctx.fillStyle = '#5b5f66'
-            for (let i = 0; i < 4; i++) ctx.fillRect(gx + 14 + (i % 2) * 6, gy - 8 - i * 9, 44, 7)
+            circle(73, GROUND + 18, 5, '#ffe080')
+            for (let i = 0; i < 3; i++) {                             // smoke
+                const t = ((time / 1500) + i / 3) % 1
+                circle(73 + Math.sin(t * 5) * 6, 34 - t * 40, 6 + t * 10, `rgba(200, 195, 190, ${0.5 * (1 - t)})`)
+            }
+            ctx.fillStyle = '#8a5a2b'                                 // bellows
+            ctx.beginPath()
+            ctx.ellipse(22, GROUND + 10, 14, 9 + Math.sin(time / 300) * 2, 0, 0, Math.PI * 2)
+            ctx.fill()
+            for (const [sx, sy, r] of [[150, GROUND + 26, 18], [176, GROUND + 30, 14], [134, GROUND + 32, 12]] as [number, number, number][]) {
+                ctx.fillStyle = '#2e2a28'
+                ctx.beginPath()
+                ctx.arc(sx, sy, r, Math.PI, 0)
+                ctx.fill()
+                rect(sx - r / 3, sy - r * 0.7, 4, 2, 'rgba(140, 130, 150, 0.6)')
+            }
+            for (let i = 0; i < 4; i++) {                             // iron bars
+                rect(170 + (i % 2) * 6, GROUND + 4 - i * 9, 46, 7, '#6b6f75')
+                rect(170 + (i % 2) * 6, GROUND + 4 - i * 9, 46, 2, '#a0a6ae')
+            }
             break
         }
         case 'egypt': {
-            tri(gx - 20, gy, 60, 70, sand, sandDark)                  // a wide Egyptian pyramid
-            ctx.fillStyle = '#c9a265'
-            ctx.fillRect(gx + 30, gy - 22, 44, 22)                    // the sphinx
-            ctx.fillRect(gx + 62, gy - 38, 16, 20)
-            ctx.fillStyle = '#2f6fb5'
-            ctx.fillRect(gx + 60, gy - 40, 20, 6)
+            // the Great Pyramids and the Sphinx, wide and low compared to the pyramids of Kush
+            rect(0, GROUND + 24, W, 8, '#4f9ac0')
+            for (const [cx, half, tall] of [[60, 52, 62], [128, 60, 76], [186, 34, 42]] as [number, number, number][]) {
+                poly([cx - half, GROUND + 10, cx, GROUND + 10 - tall, cx + half, GROUND + 10], '#e8cc96')
+                poly([cx, GROUND + 10 - tall, cx + half, GROUND + 10, cx + 6, GROUND + 10], '#bf9a5e')
+            }
+            // the sphinx lying in front
+            rect(20, GROUND + 4, 70, 16, '#c9a265')
+            rect(20, GROUND + 4, 70, 3, '#ddb97a')
+            rect(80, GROUND - 16, 22, 26, '#c9a265')
+            poly([76, GROUND - 16, 106, GROUND - 16, 102, GROUND - 2, 80, GROUND - 2], '#2f6fb5')
+            rect(86, GROUND - 10, 4, 3, '#1c1410')
+            palm(212, GROUND + 28, 44)
             break
         }
         case 'assyria': {
-            ctx.fillStyle = '#8a8f98'                                 // an iron sword
-            ctx.beginPath()
-            ctx.moveTo(gx - 6, gy - 20)
-            ctx.lineTo(gx, gy - 100)
-            ctx.lineTo(gx + 6, gy - 20)
-            ctx.fill()
-            ctx.fillStyle = '#6b4226'
-            ctx.fillRect(gx - 22, gy - 22, 44, 6)
-            ctx.fillRect(gx - 3, gy - 16, 6, 16)
+            // an Assyrian iron sword in front of a stone relief of a winged bull
+            rect(0, 24, W, 96, '#c8b48a')
+            ctx.fillStyle = 'rgba(90, 70, 40, 0.5)'
+            ctx.fillRect(20, 60, 70, 40)                              // the bull's body
+            ctx.fillRect(84, 44, 22, 30)                              // head
+            poly([30, 60, 60, 30, 74, 60], 'rgba(90, 70, 40, 0.5)')   // wing
+            for (const lx of [24, 40, 64, 80]) ctx.fillRect(lx, 100, 6, 18)
+            // the sword
+            ctx.save()
+            ctx.translate(160, 90)
+            ctx.rotate(-0.5)
+            poly([-5, 20, 0, -70, 5, 20], '#9aa0a8')
+            poly([0, -70, 5, 20, 1, 20], '#70767e')
+            rect(-20, 18, 40, 7, '#6b4226')
+            rect(-4, 25, 8, 24, '#3a2a1a')
+            circle(0, 52, 6, '#c9a227')
+            ctx.restore()
             break
         }
         case 'persia': {
-            ctx.fillStyle = '#c9a227'                                 // a gold coin with an archer
+            // a gold daric coin showing the running archer king, on cloth
+            rect(0, GROUND - 10, W, H, '#7a2a3a')
+            circle(118, 84, 52, '#9a7a1a')
+            circle(115, 81, 52, '#c9a227')
+            circle(115, 81, 44, '#e8c75a')
+            ctx.strokeStyle = '#b8901f'
+            ctx.lineWidth = 2
             ctx.beginPath()
-            ctx.arc(gx, gy - 46, 40, 0, Math.PI * 2)
-            ctx.fill()
-            ctx.fillStyle = '#e8c75a'
-            ctx.beginPath()
-            ctx.arc(gx, gy - 46, 33, 0, Math.PI * 2)
-            ctx.fill()
-            ctx.strokeStyle = '#9a7a1a'
-            ctx.lineWidth = 3
-            ctx.beginPath()
-            ctx.arc(gx + 6, gy - 46, 16, -1.2, 1.2)                   // the bow
+            ctx.arc(115, 81, 48, 0, Math.PI * 2)
             ctx.stroke()
-            ctx.fillStyle = '#9a7a1a'
-            ctx.fillRect(gx - 12, gy - 58, 6, 26)                     // the archer
+            ctx.fillStyle = '#9a7a1a'                                 // the archer king, kneeling with his bow
+            circle(104, 54, 7, '#9a7a1a')
+            poly([96, 48, 112, 48, 110, 40, 98, 40], '#9a7a1a')       // crown
+            poly([98, 60, 112, 60, 118, 100, 92, 100], '#9a7a1a')
+            ctx.strokeStyle = '#9a7a1a'
+            ctx.lineWidth = 4
+            ctx.beginPath()
+            ctx.arc(116, 76, 20, -1.3, 1.3)
+            ctx.stroke()
+            ctx.lineWidth = 2
+            ctx.beginPath()
+            ctx.moveTo(110, 58)
+            ctx.lineTo(140, 72)
+            ctx.stroke()
+            ctx.fillStyle = 'rgba(255, 250, 220, 0.6)'
+            ctx.beginPath()
+            ctx.ellipse(92, 58, 8, 14, -0.6, 0, Math.PI * 2)
+            ctx.fill()
             break
         }
         case 'greece': {
-            ctx.fillStyle = '#b5654a'                                 // a wine amphora
+            // a Greek wine amphora with black figures, by a ship's sail on the sea
+            rect(0, GROUND - 6, W, 14, '#4f8ab0')
+            poly([170, GROUND - 6, 196, GROUND - 6, 192, GROUND, 174, GROUND], '#6b4226')
+            rect(182, 50, 2, GROUND - 56, '#5a3a1a')
+            poly([184, 54, 210, 76, 184, 96], '#efe6d0')
+            ctx.fillStyle = '#b5654a'
             ctx.beginPath()
-            ctx.ellipse(gx, gy - 44, 24, 34, 0, 0, Math.PI * 2)
+            ctx.ellipse(96, 92, 34, 46, 0, 0, Math.PI * 2)
             ctx.fill()
-            ctx.fillRect(gx - 8, gy - 92, 16, 20)
-            ctx.fillRect(gx - 4, gy - 14, 8, 14)
+            outline()
+            rect(86, 28, 20, 24, '#b5654a')
+            rect(82, 26, 28, 6, '#a05238')
+            poly([88, 134, 104, 134, 100, 152, 92, 152], '#b5654a')
             ctx.strokeStyle = '#b5654a'
-            ctx.lineWidth = 5
+            ctx.lineWidth = 6
             ctx.beginPath()
-            ctx.arc(gx - 14, gy - 80, 8, Math.PI * 0.5, Math.PI * 1.5)
-            ctx.arc(gx + 14, gy - 80, 8, Math.PI * 1.5, Math.PI * 0.5)
+            ctx.arc(74, 52, 12, Math.PI * 0.5, Math.PI * 1.5)
+            ctx.moveTo(118, 40)
+            ctx.arc(118, 52, 12, Math.PI * 1.5, Math.PI * 0.5)
             ctx.stroke()
-            ctx.fillStyle = '#1c1410'
-            ctx.fillRect(gx - 24, gy - 50, 48, 6)
+            rect(64, 78, 64, 26, '#1c1410')                           // the black-figure band
+            ctx.fillStyle = '#b5654a'
+            for (const fx of [76, 96, 116]) {
+                circle(fx, 84, 3.5, '#b5654a')
+                ctx.fillRect(fx - 3, 88, 6, 12)
+            }
             break
         }
         case 'rome': {
-            ctx.fillStyle = '#b08d57'                                 // the bronze head of Augustus
+            // the bronze head of Augustus, found buried under a temple step at Meroë
+            rect(0, GROUND + 8, W, H, '#b8a07a')                      // the temple step
+            rect(0, GROUND + 8, W, 4, '#d8c49a')
+            ctx.fillStyle = '#9a7240'
             ctx.beginPath()
-            ctx.arc(gx, gy - 54, 28, 0, Math.PI * 2)
+            ctx.ellipse(115, 74, 40, 48, 0, 0, Math.PI * 2)
             ctx.fill()
-            ctx.fillRect(gx - 12, gy - 30, 24, 30)
-            ctx.fillStyle = '#7a5a30'
-            ctx.fillRect(gx - 28, gy - 80, 56, 12)                    // hair
-            ctx.fillStyle = '#f3ead6'                                 // the glass eyes that survived
-            ctx.fillRect(gx - 14, gy - 58, 8, 5)
-            ctx.fillRect(gx + 6, gy - 58, 8, 5)
-            ctx.fillStyle = '#1c1410'
-            ctx.fillRect(gx - 11, gy - 58, 3, 4)
-            ctx.fillRect(gx + 9, gy - 58, 3, 4)
+            outline('rgba(50, 30, 10, 0.6)', 2)
+            rect(98, 112, 34, 22, '#8a6234')                          // neck
+            ctx.fillStyle = '#6e4e26'                                 // hair
+            ctx.beginPath()
+            ctx.ellipse(115, 40, 40, 20, 0, Math.PI, 0)
+            ctx.fill()
+            for (let i = 0; i < 6; i++) rect(80 + i * 12, 38, 6, 8, '#6e4e26')
+            ctx.fillStyle = '#f3ead6'                                 // the glass and stone eyes that still survive
+            ctx.beginPath()
+            ctx.ellipse(100, 72, 9, 5, 0, 0, Math.PI * 2)
+            ctx.ellipse(130, 72, 9, 5, 0, 0, Math.PI * 2)
+            ctx.fill()
+            circle(101, 72, 3.5, '#5a3a1a')
+            circle(131, 72, 3.5, '#5a3a1a')
+            rect(112, 76, 6, 16, '#8a6234')                           // nose
+            rect(104, 98, 22, 3, '#5a3a1a')                           // mouth
+            ctx.fillStyle = 'rgba(80, 140, 110, 0.35)'                // green patches of old bronze
+            ctx.fillRect(84, 90, 10, 8)
+            ctx.fillRect(138, 54, 8, 10)
             break
         }
         default: {
-            // aksum: a tall carved granite stela
-            ctx.fillStyle = '#8a8f98'
+            // aksum: tall carved granite stelae on green highlands
+            ctx.fillStyle = '#7a9a4a'
             ctx.beginPath()
-            ctx.moveTo(gx - 16, gy)
-            ctx.lineTo(gx - 14, gy - 100)
-            ctx.arc(gx, gy - 100, 14, Math.PI, 0)
-            ctx.lineTo(gx + 16, gy)
+            ctx.moveTo(0, GROUND - 6)
+            ctx.quadraticCurveTo(110, GROUND - 26, 230, GROUND - 4)
+            ctx.lineTo(W, H)
+            ctx.lineTo(0, H)
             ctx.fill()
-            ctx.fillStyle = '#6b7078'
-            for (let i = 0; i < 6; i++) ctx.fillRect(gx - 10, gy - 92 + i * 15, 20, 4)   // carved "floors"
-            ctx.fillRect(gx - 5, gy - 14, 10, 14)                                      // false door
+            const stela = (cx: number, tall: number, wide: number) => {
+                ctx.fillStyle = '#8a8f98'
+                ctx.beginPath()
+                ctx.moveTo(cx - wide, GROUND + 20)
+                ctx.lineTo(cx - wide * 0.85, GROUND + 20 - tall)
+                ctx.arc(cx, GROUND + 20 - tall, wide * 0.85, Math.PI, 0)
+                ctx.lineTo(cx + wide, GROUND + 20)
+                ctx.closePath()
+                ctx.fill()
+                outline('rgba(40, 40, 50, 0.5)', 1.5)
+                rect(cx + wide * 0.3, GROUND + 20 - tall, wide * 0.55, tall, 'rgba(0, 0, 0, 0.15)')
+                ctx.fillStyle = '#6b7078'
+                const floors = Math.floor(tall / 16)
+                for (let i = 0; i < floors; i++) {
+                    ctx.fillRect(cx - wide * 0.6, GROUND + 12 - tall + 8 + i * 16, wide * 1.2, 3)
+                    ctx.fillRect(cx - wide * 0.4, GROUND + 18 - tall + 8 + i * 16, 4, 4)       // carved windows
+                    ctx.fillRect(cx + wide * 0.2, GROUND + 18 - tall + 8 + i * 16, 4, 4)
+                }
+                rect(cx - 5, GROUND + 6, 10, 14, '#5a5e66')                                   // false door
+            }
+            stela(70, 70, 12)
+            stela(120, 112, 16)
+            stela(168, 86, 13)
         }
     }
 
     if (locked) {
         // hide the picture: a dark wash with a question mark
-        ctx.fillStyle = 'rgba(26, 17, 10, 0.86)'
-        ctx.fillRect(x, y, w, h)
+        ctx.fillStyle = 'rgba(26, 17, 10, 0.88)'
+        ctx.fillRect(0, 0, W, H)
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
-        ctx.font = `700 48px ${FONT_TITLE}`
+        ctx.font = `700 52px ${FONT_TITLE}`
         ctx.fillStyle = '#6e6350'
-        ctx.fillText('?', x + w / 2, y + h / 2)
+        ctx.fillText('?', W / 2, H / 2)
     }
     ctx.restore()
 
@@ -2860,6 +3429,7 @@ export interface BuildLine {
     name: string
     have: number
     need: number
+    text?: string   // shown instead of "have / need" (used for required quests)
 }
 
 // The window for a building plot: what it costs and a Build button
@@ -2908,7 +3478,7 @@ export function drawBuildScreen(
         ctx.fillText(l.name, px + 80, y)
         ctx.textAlign = 'right'
         ctx.fillStyle = ok ? '#a8d98a' : '#e08a7a'
-        ctx.fillText(Math.min(l.have, 99) + ' / ' + l.need, px + pw - 80, y)
+        ctx.fillText(l.text ?? Math.min(l.have, 99) + ' / ' + l.need, px + pw - 80, y)
         y += 28
     }
 
@@ -2952,72 +3522,250 @@ export function drawCapitalProgress(ctx: CanvasRenderingContext2D, w: number, bu
     ctx.restore()
 }
 
-// --- The stations in the village ---
+// --- The workshops in the village ---
+// Each one stands on one tile but is drawn a bit bigger, reaching up above its tile.
 export function drawStation(ctx: CanvasRenderingContext2D, x: number, y: number, kind: string, time: number) {
     ctx.save()
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.22)'
-    ctx.beginPath()
-    ctx.ellipse(x + 16, y + 28, 13, 4, 0, 0, Math.PI * 2)
-    ctx.fill()
-    if (kind === 'furnace') {
-        ctx.fillStyle = '#6b4a3a'
-        ctx.fillRect(x + 5, y + 8, 22, 20)
-        ctx.fillStyle = '#4a3226'
-        ctx.fillRect(x + 12, y - 2, 8, 12)               // chimney
-        ctx.fillStyle = '#1a110a'
-        ctx.fillRect(x + 10, y + 16, 12, 12)             // mouth
-        const flick = Math.sin(time / 90) * 2
-        ctx.fillStyle = '#ff9a3c'
-        ctx.fillRect(x + 12, y + 22 - flick, 8, 6 + flick)
-        ctx.fillStyle = 'rgba(200, 200, 200, 0.35)'      // smoke
+    ctx.translate(x, y)   // (0, 0) is the top-left of the station's tile; the ground line is at y = 30
+    const shadow = (w: number) => {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.22)'
         ctx.beginPath()
-        ctx.arc(x + 16 + Math.sin(time / 500) * 3, y - 8 - ((time / 40) % 10), 4, 0, Math.PI * 2)
+        ctx.ellipse(16, 30, w, 5, 0, 0, Math.PI * 2)
         ctx.fill()
-    } else if (kind === 'stoneworks') {
-        ctx.fillStyle = '#d6b57a'
-        ctx.fillRect(x + 4, y + 16, 14, 12)              // stacked blocks
-        ctx.fillRect(x + 10, y + 6, 14, 10)
-        ctx.fillStyle = '#b08d57'
-        ctx.fillRect(x + 4, y + 16, 14, 2)
-        ctx.fillRect(x + 10, y + 6, 14, 2)
-        ctx.fillStyle = '#8a8f98'                        // chisel
-        ctx.fillRect(x + 22, y + 20, 7, 3)
-        ctx.fillStyle = '#6b4a3a'
-        ctx.fillRect(x + 18, y + 21, 4, 2)
-    } else if (kind === 'goldsmith') {
-        ctx.fillStyle = '#8a5a3b'
-        ctx.fillRect(x + 4, y + 14, 24, 14)              // workbench
-        ctx.fillStyle = '#6b4226'
-        ctx.fillRect(x + 4, y + 14, 24, 3)
-        ctx.fillStyle = '#e8c75a'                        // gold pieces
-        ctx.fillRect(x + 9, y + 9, 6, 5)
-        ctx.fillRect(x + 17, y + 11, 8, 3)
-        ctx.fillStyle = 'rgba(255, 246, 200, ' + (0.4 + Math.sin(time / 300) * 0.3) + ')'
-        ctx.fillRect(x + 11, y + 9, 2, 2)
-    } else if (kind === 'kiln') {
-        // a round clay oven with a fire in its mouth
-        ctx.fillStyle = '#a8683f'
-        ctx.beginPath()
-        ctx.arc(x + 16, y + 20, 12, Math.PI, 0)
-        ctx.fill()
-        ctx.fillRect(x + 4, y + 20, 24, 8)
-        ctx.fillStyle = '#8a5230'
-        ctx.fillRect(x + 4, y + 26, 24, 2)
-        ctx.fillStyle = '#1a110a'
-        ctx.beginPath()
-        ctx.arc(x + 16, y + 26, 5, Math.PI, 0)
-        ctx.fill()
-        ctx.fillStyle = '#ff9a3c'
-        ctx.fillRect(x + 13, y + 24 - Math.abs(Math.sin(time / 120)) * 2, 6, 3)
-    } else {
-        // brickyard: stacks of mud bricks
-        ctx.fillStyle = '#b0764a'
-        for (let i = 0; i < 3; i++) ctx.fillRect(x + 4 + i * 8, y + 20, 7, 8)
-        for (let i = 0; i < 2; i++) ctx.fillRect(x + 8 + i * 8, y + 12, 7, 8)
-        ctx.fillStyle = '#8a5a35'
-        for (let i = 0; i < 3; i++) ctx.fillRect(x + 4 + i * 8, y + 20, 7, 2)
-        for (let i = 0; i < 2; i++) ctx.fillRect(x + 8 + i * 8, y + 12, 7, 2)
     }
+    const smoke = (sx: number, sy: number) => {
+        for (let i = 0; i < 3; i++) {
+            const t = ((time / 1400) + i / 3) % 1
+            ctx.fillStyle = `rgba(210, 205, 195, ${0.45 * (1 - t)})`
+            ctx.beginPath()
+            ctx.arc(sx + Math.sin(t * 6 + i) * 4, sy - t * 30, 3 + t * 5, 0, Math.PI * 2)
+            ctx.fill()
+        }
+    }
+    const flicker = Math.sin(time / 90) * 0.5 + Math.sin(time / 37) * 0.5
+
+    if (kind === 'furnace') {
+        // a Meroitic iron furnace: a clay chimney on a round base, with leather bellows beside it
+        shadow(18)
+        ctx.fillStyle = '#7a4a32'
+        ctx.beginPath()
+        ctx.moveTo(4, 30)
+        ctx.lineTo(9, -6)
+        ctx.lineTo(23, -6)
+        ctx.lineTo(28, 30)
+        ctx.fill()
+        ctx.fillStyle = '#5e3624'
+        ctx.beginPath()
+        ctx.moveTo(18, -6)
+        ctx.lineTo(23, -6)
+        ctx.lineTo(28, 30)
+        ctx.lineTo(21, 30)
+        ctx.fill()
+        ctx.fillStyle = '#8f5a3c'
+        ctx.fillRect(8, -9, 16, 4)                        // the rim at the top
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)'
+        for (let ry = 2; ry < 28; ry += 7) ctx.fillRect(7, ry, 19, 1)   // clay rings
+        // the glowing opening at the bottom
+        ctx.fillStyle = '#1a0d06'
+        ctx.beginPath()
+        ctx.arc(16, 30, 7, Math.PI, 0)
+        ctx.fill()
+        ctx.fillStyle = `rgba(255, ${140 + flicker * 40}, 40, 0.95)`
+        ctx.beginPath()
+        ctx.arc(16, 30, 5 + flicker, Math.PI, 0)
+        ctx.fill()
+        ctx.fillStyle = 'rgba(255, 150, 50, 0.18)'
+        ctx.beginPath()
+        ctx.arc(16, 28, 14, 0, Math.PI * 2)
+        ctx.fill()
+        // the bellows: a leather bag with a pipe into the furnace
+        const puff = Math.sin(time / 300) * 1.5
+        ctx.fillStyle = '#8a5a2b'
+        ctx.beginPath()
+        ctx.ellipse(-3, 24, 6, 4 + puff, 0, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.fillStyle = '#5a3a1a'
+        ctx.fillRect(2, 24, 6, 2)
+        smoke(16, -10)
+    } else if (kind === 'stoneworks') {
+        // stacked sandstone blocks, one half-cut block with a chisel and mallet, and chips on the ground
+        shadow(20)
+        const block = (bx: number, by: number, bw: number, bh: number) => {
+            ctx.fillStyle = '#e2c48c'
+            ctx.fillRect(bx, by, bw, 3)                        // top
+            ctx.fillStyle = '#d0aa6c'
+            ctx.fillRect(bx, by + 3, bw, bh - 3)               // front
+            ctx.fillStyle = '#a8834c'
+            ctx.fillRect(bx + bw - 3, by + 3, 3, bh - 3)       // side
+            ctx.fillStyle = 'rgba(120, 85, 40, 0.35)'
+            ctx.fillRect(bx + 2, by + bh / 2 + 1, bw - 6, 1)   // a layer in the stone
+        }
+        block(-4, 18, 14, 12)
+        block(10, 18, 14, 12)
+        block(2, 6, 14, 12)
+        // the rough block being worked on
+        ctx.fillStyle = '#c9a265'
+        ctx.beginPath()
+        ctx.moveTo(24, 30)
+        ctx.lineTo(25, 20)
+        ctx.lineTo(31, 17)
+        ctx.lineTo(37, 21)
+        ctx.lineTo(37, 30)
+        ctx.fill()
+        // a chisel and a wooden mallet
+        ctx.fillStyle = '#8a8f98'
+        ctx.save()
+        ctx.translate(30, 15)
+        ctx.rotate(0.5)
+        ctx.fillRect(-1, -9, 2, 9)
+        ctx.restore()
+        const swing = Math.max(0, Math.sin(time / 260)) * 0.5
+        ctx.save()
+        ctx.translate(36, 8)
+        ctx.rotate(-0.6 - swing)
+        ctx.fillStyle = '#6b4226'
+        ctx.fillRect(-1, 0, 2, 10)
+        ctx.fillStyle = '#8a5a35'
+        ctx.fillRect(-4, -4, 8, 5)
+        ctx.restore()
+        ctx.fillStyle = '#e2c48c'
+        for (const [cx, cy] of [[28, 31], [33, 32], [21, 32], [38, 31]]) ctx.fillRect(cx, cy, 2, 1.5)
+    } else if (kind === 'goldsmith') {
+        // a table under a striped cloth shade, with a glowing crucible and gold pieces
+        shadow(20)
+        ctx.fillStyle = '#5a3a1a'
+        ctx.fillRect(-2, -6, 2, 36)                        // shade poles
+        ctx.fillRect(32, -6, 2, 36)
+        for (let i = 0; i < 6; i++) {                      // the striped cloth
+            ctx.fillStyle = i % 2 ? '#e8d4a2' : '#b0412e'
+            ctx.fillRect(-4 + i * 7, -10, 7, 7)
+        }
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.15)'
+        ctx.fillRect(-4, -3, 42, 2)
+        ctx.fillStyle = '#8a5a3b'                          // the table
+        ctx.fillRect(0, 16, 32, 5)
+        ctx.fillStyle = '#6b4226'
+        ctx.fillRect(2, 21, 3, 9)
+        ctx.fillRect(27, 21, 3, 9)
+        ctx.fillStyle = '#3a2a1a'                          // the crucible, glowing with melted gold
+        ctx.beginPath()
+        ctx.arc(9, 14, 5, 0, Math.PI)
+        ctx.fill()
+        ctx.fillStyle = `rgba(255, ${190 + flicker * 30}, 60, 1)`
+        ctx.fillRect(5, 12, 8, 2)
+        ctx.fillStyle = '#e8c75a'                          // gold pieces and a finished ring
+        ctx.fillRect(17, 12, 5, 4)
+        ctx.fillRect(23, 13, 3, 3)
+        ctx.strokeStyle = '#e8c75a'
+        ctx.lineWidth = 1.5
+        ctx.beginPath()
+        ctx.arc(28, 13, 2.5, 0, Math.PI * 2)
+        ctx.stroke()
+        const shine = (Math.sin(time / 300) + 1) / 2
+        ctx.fillStyle = `rgba(255, 246, 200, ${0.3 + shine * 0.6})`
+        ctx.fillRect(18, 12, 2, 1)
+    } else if (kind === 'kiln') {
+        // a round, beehive-shaped clay kiln with a fire, and finished pots beside it
+        shadow(19)
+        const kiln = ctx.createLinearGradient(0, -6, 0, 30)
+        kiln.addColorStop(0, '#b8774a')
+        kiln.addColorStop(1, '#8a5232')
+        ctx.fillStyle = kiln
+        ctx.beginPath()
+        ctx.moveTo(1, 30)
+        ctx.quadraticCurveTo(0, 2, 15, -4)
+        ctx.quadraticCurveTo(30, 2, 29, 30)
+        ctx.fill()
+        ctx.fillStyle = '#9a6038'
+        ctx.fillRect(11, -7, 8, 5)                         // the vent at the top
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)'
+        ctx.lineWidth = 1
+        for (let ry = 6; ry < 28; ry += 7) {                // rings of clay
+            ctx.beginPath()
+            ctx.moveTo(3, ry)
+            ctx.quadraticCurveTo(15, ry + 3, 27, ry)
+            ctx.stroke()
+        }
+        ctx.fillStyle = '#1a0d06'                          // the fire mouth
+        ctx.beginPath()
+        ctx.arc(15, 30, 7, Math.PI, 0)
+        ctx.fill()
+        ctx.fillStyle = `rgba(255, ${130 + flicker * 50}, 40, 0.95)`
+        ctx.beginPath()
+        ctx.arc(15, 30, 4.5 + flicker, Math.PI, 0)
+        ctx.fill()
+        // pots: one black-topped Kerma pot and a round water jar
+        ctx.fillStyle = '#9a3a24'
+        ctx.beginPath()
+        ctx.moveTo(31, 18)
+        ctx.lineTo(39, 18)
+        ctx.lineTo(37, 30)
+        ctx.lineTo(33, 30)
+        ctx.fill()
+        ctx.fillStyle = '#1a110a'
+        ctx.fillRect(31, 17, 8, 4)
+        ctx.fillStyle = '#c08a5a'
+        ctx.beginPath()
+        ctx.arc(-5, 25, 5, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.fillRect(-7, 18, 4, 3)
+        smoke(15, -9)
+    } else {
+        // brickyard: rows of mud bricks drying in the sun, a wooden mold and a pile of wet clay
+        shadow(22)
+        ctx.fillStyle = '#9a6b4a'                          // the clay pile
+        ctx.beginPath()
+        ctx.ellipse(-2, 25, 8, 5, 0, Math.PI, 0)
+        ctx.fill()
+        ctx.fillRect(-10, 25, 16, 5)
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.25)'
+        ctx.fillRect(-5, 21, 4, 1.5)
+        const brick = (bx: number, by: number) => {
+            ctx.fillStyle = '#c08050'
+            ctx.fillRect(bx, by, 9, 4)
+            ctx.fillStyle = '#9a6038'
+            ctx.fillRect(bx, by + 4, 9, 2)
+            ctx.fillStyle = 'rgba(230, 200, 120, 0.6)'     // straw in the brick
+            ctx.fillRect(bx + 2, by + 1, 3, 0.8)
+        }
+        for (let i = 0; i < 3; i++) brick(8 + i * 10, 24)  // a row on the ground
+        for (let i = 0; i < 2; i++) brick(13 + i * 10, 18) // and a stack on top
+        brick(18, 12)
+        ctx.strokeStyle = '#6b4226'                        // the wooden brick mold
+        ctx.lineWidth = 2
+        ctx.strokeRect(29, 6, 11, 6)
+        ctx.beginPath()
+        ctx.moveTo(34.5, 6)
+        ctx.lineTo(34.5, 12)
+        ctx.stroke()
+    }
+    ctx.restore()
+}
+
+// A small "press E" bubble, shown above a workshop or plot when you stand next to it
+export function drawKeyHint(ctx: CanvasRenderingContext2D, text: string, cx: number, cy: number, time: number) {
+    ctx.save()
+    const y = cy + Math.sin(time / 250) * 2
+    ctx.font = `700 11px ${FONT_TITLE}`
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
+    const tw = ctx.measureText(text).width
+    const w = tw + 34
+    const x = cx - w / 2
+    ctx.fillStyle = 'rgba(232, 199, 90, 0.95)'
+    ctx.beginPath()
+    ctx.roundRect(x, y - 11, w, 22, 11)
+    ctx.fill()
+    ctx.fillStyle = '#1a110a'                              // the key
+    ctx.beginPath()
+    ctx.roundRect(x + 5, y - 8, 16, 16, 4)
+    ctx.fill()
+    ctx.fillStyle = '#f6dc82'
+    ctx.textAlign = 'center'
+    ctx.fillText('E', x + 13, y + 0.5)
+    ctx.fillStyle = '#1a110a'
+    ctx.textAlign = 'left'
+    ctx.fillText(text, x + 27, y + 0.5)
     ctx.restore()
 }
 
@@ -3047,128 +3795,361 @@ export function drawPlotOutline(ctx: CanvasRenderingContext2D, x: number, y: num
 export function drawBuilding(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, id: string, time: number, progress: number) {
     ctx.save()
     ctx.beginPath()
-    ctx.rect(x - 4, y + h * (1 - progress) - 4, w + 8, h * progress + 8)
+    const rise = progress < 1 ? Math.max(0, (progress - 0.12) / 0.88) : 1   // (the first 12% is the foundation)
+    ctx.rect(x - 8, y + h * (1 - rise) - (rise < 1 ? 0 : 40), w + 16, h * rise + (rise < 1 ? 0 : 48))
     ctx.clip()
-    const sand = '#d6b57a'
-    const sandDark = '#b08d57'
-    const mud = '#b98655'
+    ctx.translate(x, y)   // from here on (0, 0) is the top-left of the plot
+
+    const sand = '#dcc08a'
+    const sandMid = '#c9a46a'
+    const sandDark = '#a5814c'
+    const rect = (rx: number, ry: number, rw: number, rh: number, c: string) => {
+        ctx.fillStyle = c
+        ctx.fillRect(rx, ry, rw, rh)
+    }
+    const poly = (pts: number[], c: string) => {
+        ctx.fillStyle = c
+        ctx.beginPath()
+        ctx.moveTo(pts[0], pts[1])
+        for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1])
+        ctx.closePath()
+        ctx.fill()
+    }
+    // a stone block of a building seen from a little above: roof on top, wall in front, shade on the right
+    const box = (bx: number, by: number, bw: number, bh: number, roof: number, wall: string, top: string) => {
+        rect(bx, by, bw, roof, top)
+        rect(bx, by + roof, bw, bh - roof, wall)
+        rect(bx, by + roof, bw, 2, 'rgba(0, 0, 0, 0.18)')
+        rect(bx + bw - 4, by + roof, 4, bh - roof, 'rgba(0, 0, 0, 0.15)')
+    }
+    // a pylon tower: wider at the bottom, with lines carved across it
+    const pylon = (px: number, py: number, pw: number, ph: number) => {
+        poly([px, py + ph, px + 5, py, px + pw - 5, py, px + pw, py + ph], sandMid)
+        poly([px + pw - 10, py, px + pw - 5, py, px + pw, py + ph, px + pw - 6, py + ph], sandDark)
+        rect(px + 3, py, pw - 6, 4, sand)
+        ctx.fillStyle = 'rgba(110, 75, 35, 0.35)'
+        for (let ly = py + 12; ly < py + ph - 6; ly += 10) ctx.fillRect(px + 7, ly, pw - 16, 1.5)
+        // a carved king, very simply
+        rect(px + pw / 2 - 3, py + ph * 0.35, 6, ph * 0.35, 'rgba(110, 75, 35, 0.45)')
+        ctx.fillStyle = 'rgba(110, 75, 35, 0.45)'
+        ctx.beginPath()
+        ctx.arc(px + pw / 2, py + ph * 0.32, 3.5, 0, Math.PI * 2)
+        ctx.fill()
+    }
+    const column = (cx: number, top: number, bottom: number) => {
+        rect(cx - 4, top, 8, bottom - top, '#ecdcb4')
+        rect(cx + 1, top, 3, bottom - top, '#cdb98c')
+        rect(cx - 6, top - 4, 12, 4, '#c9a227')            // gold capital
+        rect(cx - 6, bottom - 2, 12, 3, sandDark)
+    }
+    const ram = (rx: number, ry: number) => {                // a small ram statue, like the ones at Amun temples
+        rect(rx - 6, ry + 4, 12, 5, sandDark)               // plinth
+        rect(rx - 5, ry - 2, 10, 6, sandMid)                // body
+        ctx.fillStyle = sandMid
+        ctx.beginPath()
+        ctx.arc(rx + 5, ry - 3, 3.5, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.strokeStyle = '#8a6a3a'
+        ctx.lineWidth = 1.5
+        ctx.beginPath()
+        ctx.arc(rx + 4, ry - 3, 2.5, 0.5, Math.PI * 1.8)    // curled horn
+        ctx.stroke()
+    }
+    const lion = (lx: number, ly: number, flip: boolean) => {
+        ctx.save()
+        ctx.translate(lx, ly)
+        if (flip) ctx.scale(-1, 1)
+        rect(-8, 2, 16, 5, sandDark)
+        rect(-7, -3, 12, 6, sandMid)
+        ctx.fillStyle = sandDark
+        ctx.beginPath()
+        ctx.arc(5, -3, 5, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.fillStyle = sandMid
+        ctx.beginPath()
+        ctx.arc(6, -2, 3, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.restore()
+    }
+    const water = (wx: number, wy: number, ww: number, wh: number, deep: string, light: string) => {
+        const g = ctx.createLinearGradient(0, wy, 0, wy + wh)
+        g.addColorStop(0, light)
+        g.addColorStop(1, deep)
+        ctx.fillStyle = g
+        ctx.fillRect(wx, wy, ww, wh)
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'
+        for (let i = 0; i < Math.floor(ww * wh / 1800); i++) {
+            const rx = wx + 8 + ((i * 97 + time / 30) % Math.max(1, ww - 30))
+            const ry = wy + 8 + ((i * 53) % Math.max(1, wh - 16))
+            ctx.fillRect(rx, ry, 10 + (i % 3) * 4, 1.5)
+        }
+    }
 
     if (id === 'houses') {
-        const n = 3
-        const cw = w / n
-        for (let i = 0; i < n; i++) {
-            const hx = x + i * cw + 6
-            const hw = cw - 12
-            const hy = y + 8 + (i % 2) * 14
-            ctx.fillStyle = mud
-            ctx.fillRect(hx, hy, hw, h * 0.5)
-            ctx.fillStyle = '#7a4a2a'
-            ctx.fillRect(hx - 3, hy - 5, hw + 6, 8)
-            ctx.fillStyle = '#2b1a10'
-            ctx.fillRect(hx + hw / 2 - 5, hy + h * 0.5 - 16, 10, 16)
-            ctx.fillStyle = '#d9a064'
-            ctx.fillRect(hx + 4, hy + 10, 6, 6)
+        // three mud-brick houses of different sizes around a little courtyard
+        const houses: [number, number, number, number][] = [[8, 18, 64, 70], [80, 6, 56, 82], [142, 24, 46, 64]]
+        for (const [hx, hy, hw, hh] of houses) {
+            ctx.save()
+            ctx.translate(hx, hy)
+            paintHouse(ctx, hw, hh)
+            ctx.restore()
+        }
+        // the courtyard wall with a gate, a water jar and a little palm
+        rect(4, 112, w - 8, 10, '#c48e5c')
+        rect(4, 112, w - 8, 3, '#d9a874')
+        rect(w / 2 - 14, 112, 28, 10, '#efe2c4')
+        rect(w / 2 - 10, 114, 20, 8, '#6b4226')
+        ctx.fillStyle = '#c08a5a'
+        ctx.beginPath()
+        ctx.arc(40, 104, 6, 0, Math.PI * 2)
+        ctx.fill()
+        rect(37, 96, 6, 3, '#a8703f')
+        rect(w - 30, 70, 4, 40, '#8a5a2b')                  // palm trunk
+        for (let i = 0; i < 5; i++) {
+            ctx.save()
+            ctx.translate(w - 28, 70)
+            ctx.rotate(-1.4 + i * 0.7)
+            ctx.fillStyle = i % 2 ? '#4f7a2e' : '#6b9a3a'
+            ctx.beginPath()
+            ctx.ellipse(12, 0, 13, 3.5, 0, 0, Math.PI * 2)
+            ctx.fill()
+            ctx.restore()
         }
     } else if (id === 'ironworks') {
-        ctx.fillStyle = '#6b4a3a'
-        ctx.fillRect(x + 8, y + 14, w * 0.5, h - 24)
-        ctx.fillStyle = '#4a3226'
-        ctx.fillRect(x + 22, y - 2, 12, 20)
-        ctx.fillStyle = '#1a110a'
-        ctx.fillRect(x + 14, y + h - 40, 22, 16)
-        const f = Math.sin(time / 90) * 2
-        ctx.fillStyle = '#ff9a3c'
-        ctx.fillRect(x + 18, y + h - 34 - f, 14, 10 + f)
-        ctx.fillStyle = '#5b5f66'                         // iron bars stacked on the right
-        for (let i = 0; i < 3; i++) ctx.fillRect(x + w * 0.62, y + h - 20 - i * 7, w * 0.3, 5)
-        ctx.fillStyle = 'rgba(200, 200, 200, 0.3)'
-        ctx.beginPath()
-        ctx.arc(x + 28 + Math.sin(time / 500) * 4, y - 8 - ((time / 40) % 14), 5, 0, Math.PI * 2)
-        ctx.fill()
+        // a workshop with a shade roof, three furnaces in a row, a heap of slag and a stack of iron bars
+        box(6, 8, 96, 70, 14, '#b88456', '#8a6a44')
+        rect(6, 8, 96, 4, '#a07c50')                          // the reed roof
+        ctx.fillStyle = 'rgba(80, 55, 25, 0.35)'
+        for (let rx = 10; rx < 100; rx += 6) ctx.fillRect(rx, 8, 2, 14)
+        rect(30, 50, 22, 28, '#3b2414')                       // a wide doorway, glowing inside
+        rect(33, 60, 16, 18, 'rgba(255, 140, 50, 0.35)')
+        for (let i = 0; i < 3; i++) drawStation(ctx, 120 + i * 34, 70, 'furnace', time + i * 400)
+        // the slag heap: dark glassy lumps
+        for (const [sx, sy, r] of [[30, 130, 14], [50, 136, 12], [16, 138, 10], [40, 120, 10]] as [number, number, number][]) {
+            ctx.fillStyle = '#2e2a28'
+            ctx.beginPath()
+            ctx.arc(sx, sy, r, Math.PI, 0)
+            ctx.fill()
+            ctx.fillStyle = 'rgba(120, 110, 130, 0.5)'
+            ctx.fillRect(sx - r / 2, sy - r * 0.7, 3, 2)
+        }
+        for (let i = 0; i < 4; i++) {                         // iron bars stacked by the door
+            rect(70 + (i % 2) * 6, 140 - i * 6, 40, 5, '#6b6f75')
+            rect(70 + (i % 2) * 6, 140 - i * 6, 40, 1.5, '#9aa0a8')
+        }
+        rect(118, 128, 14, 6, '#4a4e55')                      // the anvil
+        rect(121, 134, 8, 8, '#3a3e44')
     } else if (id === 'hafir') {
-        ctx.fillStyle = sandDark                           // the stone rim
-        ctx.fillRect(x + 4, y + 6, w - 8, h - 12)
-        ctx.fillStyle = '#3f8fbf'
-        ctx.fillRect(x + 14, y + 16, w - 28, h - 32)
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.28)'
-        for (let i = 0; i < 4; i++) ctx.fillRect(x + 20 + ((i * 53 + time / 25) % (w - 60)), y + 24 + i * ((h - 56) / 4), 14, 2)
+        // a big round-cornered water tank dug into the ground, with stone steps down and lions guarding it
+        ctx.fillStyle = '#c8a46c'                              // the earth bank
+        ctx.beginPath()
+        ctx.roundRect(4, 4, w - 8, h - 8, 40)
+        ctx.fill()
+        ctx.fillStyle = '#b08a52'
+        ctx.beginPath()
+        ctx.roundRect(16, 16, w - 32, h - 32, 32)
+        ctx.fill()
+        ctx.fillStyle = '#9a7646'                              // a stone step around the water
+        ctx.beginPath()
+        ctx.roundRect(26, 26, w - 52, h - 52, 26)
+        ctx.fill()
+        ctx.save()
+        ctx.beginPath()
+        ctx.roundRect(34, 34, w - 68, h - 68, 22)
+        ctx.clip()
+        water(34, 34, w - 68, h - 68, '#2b6f9a', '#4fa3c8')
+        ctx.restore()
+        for (let i = 0; i < 4; i++) rect(w / 2 - 16, h - 32 + i * 6 - 18, 32, 4, i % 2 ? '#b08a52' : '#c8a46c')   // steps down
+        lion(w / 2 - 34, h - 14, false)
+        lion(w / 2 + 34, h - 14, true)
+        ctx.fillStyle = '#5a8a3a'                              // reeds in the corners
+        for (const [rx, ry] of [[44, 44], [w - 50, 46], [46, h - 56]]) {
+            for (let i = 0; i < 4; i++) ctx.fillRect(rx + i * 3, ry - (i % 2) * 4, 1.5, 10)
+        }
     } else if (id === 'cemetery') {
-        const spots: [number, number, number][] = [[0.28, 0.45, 0.28], [0.7, 0.4, 0.26], [0.5, 0.82, 0.3]]
-        for (const [fx, fy, fs] of spots) {
-            const px = x + w * fx
-            const py = y + h * fy
-            const s = w * fs
-            ctx.fillStyle = sand
-            ctx.beginPath()
-            ctx.moveTo(px - s, py)
-            ctx.lineTo(px, py - s * 1.7)
-            ctx.lineTo(px + s, py)
-            ctx.fill()
-            ctx.fillStyle = sandDark
-            ctx.beginPath()
-            ctx.moveTo(px, py - s * 1.7)
-            ctx.lineTo(px + s, py)
-            ctx.lineTo(px + s * 0.2, py)
-            ctx.fill()
-            ctx.fillStyle = '#6b4a30'
-            ctx.fillRect(px - 3, py - 8, 6, 8)             // small chapel door
+        // three steep royal pyramids, each with a small chapel at its front, inside a low wall
+        rect(2, h - 12, w - 4, 8, sandDark)
+        rect(2, h - 12, w - 4, 3, sandMid)
+        const pyr: [number, number, number, number][] = [[6, 30, 70, 120], [110, 20, 76, 132], [62, 70, 72, 104]]
+        for (const [px, py, pw, ph] of pyr) {
+            ctx.save()
+            ctx.translate(px, py)
+            paintPyramid(ctx, pw, ph)
+            ctx.restore()
+            // the chapel in front: a little pylon gateway
+            const cx = px + pw / 2
+            const cy = py + ph
+            pylon(cx - 16, cy - 18, 12, 18)
+            pylon(cx + 4, cy - 18, 12, 18)
+            rect(cx - 4, cy - 14, 8, 14, '#5a3d0a')
         }
     } else if (id === 'temple') {
-        ctx.fillStyle = sand
-        ctx.fillRect(x + 4, y + 10, w - 8, h - 14)
-        ctx.fillStyle = sandDark
-        ctx.fillRect(x + 4, y + 10, w - 8, 8)
-        const cols = 5
-        for (let i = 0; i < cols; i++) {                   // the columns
-            const cx = x + 18 + i * ((w - 44) / (cols - 1))
-            ctx.fillStyle = '#e8d4a2'
-            ctx.fillRect(cx, y + 22, 8, h - 40)
-            ctx.fillStyle = '#c9a227'
-            ctx.fillRect(cx - 2, y + 20, 12, 4)
+        // the Temple of Amun: a great pylon gateway with flags, a columned hall behind, and an avenue of rams
+        box(30, 6, w - 60, 96, 16, '#d6b98a', sand)            // the hall behind the gate
+        for (let i = 0; i < 6; i++) column(48 + i * ((w - 96) / 5), 34, 100)
+        rect(30, 6, w - 60, 4, '#c9a227')
+        // the pylon gateway
+        pylon(18, 70, 110, 110)
+        pylon(w - 128, 70, 110, 110)
+        rect(126, 96, w - 252, 84, sandDark)                  // the gate between the towers
+        rect(w / 2 - 16, 116, 32, 64, '#3a2a1a')
+        rect(w / 2 - 20, 108, 40, 8, '#c9a227')               // a gold winged sun over the door
+        poly([w / 2 - 34, 112, w / 2 - 20, 108, w / 2 - 20, 116], '#c9a227')
+        poly([w / 2 + 34, 112, w / 2 + 20, 108, w / 2 + 20, 116], '#c9a227')
+        for (const fx of [34, 108, w - 108, w - 34]) {        // flagpoles with red flags
+            rect(fx, 40, 3, 60, '#6b4226')
+            const flap = Math.sin(time / 300 + fx) * 3
+            poly([fx + 3, 42, fx + 18, 46 + flap, fx + 3, 52], '#b0412e')
         }
-        ctx.fillStyle = '#3a2a1a'
-        ctx.fillRect(x + w / 2 - 9, y + h - 36, 18, 22)    // the doorway
-        ctx.fillStyle = '#e8c75a'
-        ctx.fillRect(x + w / 2 - 12, y + 12, 24, 4)
+        // the avenue of rams leading to the gate
+        for (let i = 0; i < 3; i++) {
+            ram(w / 2 - 44, 196 + i * 20)
+            ram(w / 2 + 44, 196 + i * 20)
+        }
+        rect(w / 2 - 22, 182, 44, h - 186, 'rgba(255, 240, 200, 0.25)')   // the paved way
     } else if (id === 'baths') {
-        ctx.fillStyle = '#e8d4a2'
-        ctx.fillRect(x + 4, y + 6, w - 8, h - 12)
-        ctx.fillStyle = '#4aa8c9'
-        ctx.fillRect(x + 18, y + 20, w - 36, h - 40)
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'
-        for (let i = 0; i < 3; i++) ctx.fillRect(x + 26 + ((i * 41 + time / 30) % (w - 70)), y + 28 + i * ((h - 64) / 3), 12, 2)
-        ctx.fillStyle = sandDark
-        for (const [cx, cy] of [[x + 8, y + 8], [x + w - 16, y + 8], [x + 8, y + h - 20], [x + w - 16, y + h - 20]]) ctx.fillRect(cx, cy, 8, 12)
+        // the Royal Baths: a pool with patterned tiles, columns all around, and water spouting from lion heads
+        rect(4, 4, w - 8, h - 8, '#d9c39a')                   // the floor
+        rect(4, 4, w - 8, 10, '#b88456')                      // the back wall
+        rect(4, 4, w - 8, 3, '#c9a227')
+        const px = 40
+        const py = 46
+        const pw = w - 80
+        const ph = h - 96
+        rect(px - 6, py - 6, pw + 12, ph + 12, '#7aa8b8')    // the blue tiled edge
+        water(px, py, pw, ph, '#1f6f94', '#5ab8d4')
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)'        // tiles under the water
+        ctx.lineWidth = 1
+        for (let gx = px + 16; gx < px + pw; gx += 16) {
+            ctx.beginPath()
+            ctx.moveTo(gx, py)
+            ctx.lineTo(gx, py + ph)
+            ctx.stroke()
+        }
+        for (let gy = py + 16; gy < py + ph; gy += 16) {
+            ctx.beginPath()
+            ctx.moveTo(px, gy)
+            ctx.lineTo(px + pw, gy)
+            ctx.stroke()
+        }
+        for (let i = 0; i < 3; i++) {                          // lion-head spouts on the back edge, with water arcs
+            const sx = px + pw * (0.25 + i * 0.25)
+            rect(sx - 5, py - 12, 10, 8, sandDark)
+            ctx.strokeStyle = 'rgba(200, 235, 255, 0.8)'
+            ctx.lineWidth = 2
+            ctx.beginPath()
+            ctx.moveTo(sx, py - 5)
+            ctx.quadraticCurveTo(sx + 4, py + 2, sx + 2, py + 10 + Math.sin(time / 150 + i) * 1.5)
+            ctx.stroke()
+        }
+        for (let i = 0; i < 6; i++) {                          // columns along both sides
+            column(18, 30 + i * ((h - 60) / 5), 30 + i * ((h - 60) / 5) + 22)
+            column(w - 18, 30 + i * ((h - 60) / 5), 30 + i * ((h - 60) / 5) + 22)
+        }
+        rect(w / 2 - 20, h - 40, 40, 30, '#d9c39a')           // steps into the pool
+        for (let i = 0; i < 3; i++) rect(w / 2 - 20, h - 46 + i * 6, 40, 3, '#b8a07a')
     } else {
-        // the royal enclosure: a wall around a palace with a gold roof
-        ctx.fillStyle = sandDark
-        ctx.fillRect(x + 2, y + 6, w - 4, h - 10)
-        ctx.fillStyle = sand
-        ctx.fillRect(x + 8, y + 12, w - 16, h - 22)
-        ctx.fillStyle = '#e8d4a2'
-        ctx.fillRect(x + w * 0.25, y + h * 0.25, w * 0.5, h * 0.45)
-        ctx.fillStyle = '#e8c75a'
-        ctx.fillRect(x + w * 0.22, y + h * 0.2, w * 0.56, 8)
-        ctx.fillStyle = '#3a2a1a'
-        ctx.fillRect(x + w / 2 - 8, y + h * 0.5, 16, h * 0.2)
-        ctx.fillStyle = sandDark
-        for (let i = 0; i < w - 12; i += 12) ctx.fillRect(x + 6 + i, y + 2, 7, 6)   // the wall's top
-        ctx.fillStyle = '#2b1a10'
-        ctx.fillRect(x + w / 2 - 10, y + h - 20, 20, 14)                            // the gate
+        // the Royal Enclosure: thick walls with towers, and the palace of the Kandake inside
+        rect(0, 10, w, h - 10, '#b48a58')                     // outer wall
+        rect(14, 24, w - 28, h - 38, '#d8c294')               // the courtyard inside
+        rect(0, 10, w, 4, '#c9a46a')
+        for (let i = 0; i < w; i += 14) rect(i, 4, 8, 7, '#b48a58')   // the wall's top
+        for (const [tx, ty] of [[0, 0], [w - 28, 0], [0, h - 40], [w - 28, h - 40]]) {   // corner towers
+            box(tx, ty, 28, 40, 8, '#a87e4c', '#c9a46a')
+            rect(tx + 10, ty + 18, 8, 10, '#3b2414')
+        }
+        // the palace: a wide lower floor and a smaller upper floor
+        box(54, 60, w - 108, 120, 14, '#e8d8b0', '#c9a46a')
+        box(94, 30, w - 188, 44, 12, '#efe2c4', '#c9a46a')
+        rect(54, 60, w - 108, 4, '#c9a227')                   // gold trim
+        rect(94, 30, w - 188, 4, '#c9a227')
+        for (let i = 0; i < 7; i++) {                          // windows
+            const wx = 70 + i * ((w - 150) / 6)
+            rect(wx, 92, 10, 14, '#3b2414')
+            rect(wx - 1, 106, 12, 2, '#c9a227')
+        }
+        for (let i = 0; i < 4; i++) rect(112 + i * ((w - 234) / 3), 52, 8, 10, '#3b2414')
+        pylon(w / 2 - 44, 132, 30, 48)                        // the palace gate
+        pylon(w / 2 + 14, 132, 30, 48)
+        rect(w / 2 - 14, 146, 28, 34, '#3b2414')
+        rect(w / 2 - 16, 140, 32, 6, '#c9a227')
+        rect(w / 2 - 16, h - 14, 32, 14, '#3b2414')           // the main gate in the outer wall
+        rect(w / 2 - 20, h - 18, 40, 4, '#c9a227')
     }
     ctx.restore()
 
     if (progress < 1) {
-        // scaffolding while it goes up
+        // --- building site: foundation stones, scaffolding, workers and dust ---
+        const rise = Math.max(0, (progress - 0.12) / 0.88)
+        const top = y + h * (1 - rise)
         ctx.save()
-        ctx.strokeStyle = '#8a5a2b'
-        ctx.lineWidth = 3
-        ctx.strokeRect(x + 2, y + h * (1 - progress), w - 4, h * progress)
-        for (let i = 1; i < 4; i++) {
+        // the foundation: a ring of stones laid out around the plot, appearing one by one
+        const stones = Math.floor(Math.min(1, progress / 0.12) * ((w + h) / 8))
+        ctx.fillStyle = '#a5814c'
+        for (let i = 0; i < stones; i++) {
+            const t = i / ((w + h) / 8)
+            const along = t * 2 * (w + h)
+            let sx: number
+            let sy: number
+            if (along < w) { sx = x + along; sy = y + h - 8 }
+            else if (along < w + h) { sx = x + w - 8; sy = y + h - (along - w) }
+            else if (along < 2 * w + h) { sx = x + w - (along - w - h); sy = y }
+            else { sx = x; sy = y + (along - 2 * w - h) }
+            ctx.fillRect(sx, sy, 7, 7)
+        }
+        // piles of stone and bricks waiting by the plot
+        ctx.fillStyle = '#c9a46a'
+        for (let i = 0; i < 4; i++) ctx.fillRect(x + 6 + (i % 2) * 9, y + h + 2 + Math.floor(i / 2) * -6, 8, 5)
+        if (rise > 0) {
+            // wooden scaffolding up to just above the walls
+            ctx.strokeStyle = '#8a5a2b'
+            ctx.lineWidth = 3
+            const poles = Math.max(3, Math.round(w / 48))
+            const scaffoldTop = Math.max(y - 10, top - 16)
+            for (let i = 0; i <= poles; i++) {
+                const px = x + 4 + (i * (w - 8)) / poles
+                ctx.beginPath()
+                ctx.moveTo(px, y + h)
+                ctx.lineTo(px, scaffoldTop)
+                ctx.stroke()
+            }
+            ctx.lineWidth = 4
+            ctx.strokeStyle = '#a0703a'
+            for (let py = y + h - 20; py > scaffoldTop; py -= 26) {   // planks to stand on
+                ctx.beginPath()
+                ctx.moveTo(x, py)
+                ctx.lineTo(x + w, py)
+                ctx.stroke()
+            }
+            ctx.lineWidth = 1.5
+            ctx.strokeStyle = 'rgba(110, 70, 30, 0.8)'
+            for (let i = 0; i < poles; i++) {                        // cross braces
+                const x1 = x + 4 + (i * (w - 8)) / poles
+                const x2 = x + 4 + ((i + 1) * (w - 8)) / poles
+                ctx.beginPath()
+                ctx.moveTo(x1, y + h)
+                ctx.lineTo(x2, Math.max(scaffoldTop, y + h - 60))
+                ctx.stroke()
+            }
+            // a few workers walking back and forth on the planks, carrying stones
+            const workers = Math.max(2, Math.round(w / 90))
+            for (let i = 0; i < workers; i++) {
+                const plank = y + h - 20 - 26 * (i % Math.max(1, Math.floor((y + h - scaffoldTop) / 26)))
+                const walk = (Math.sin(time / (1400 + i * 300) + i * 2) + 1) / 2
+                const wx = x + 10 + walk * (w - 40)
+                const goingRight = Math.cos(time / (1400 + i * 300) + i * 2) > 0
+                drawPerson(ctx, wx, plank - 20, 20, { skin: i % 2 ? '#6b4226' : '#8d5a3b', cloth: '#f3ead6', accent: '#a5814c', outfit: 'kilt', hair: i % 2 ? 'bald' : 'short' }, goingRight ? 'right' : 'left', true, time + i * 500)
+                ctx.fillStyle = '#d0aa6c'
+                ctx.fillRect(wx + 4, plank - 34, 12, 6)                 // the stone on their head
+            }
+        }
+        // dust puffing up at the bottom
+        for (let i = 0; i < 4; i++) {
+            const t = ((time / 1200) + i / 4) % 1
+            ctx.fillStyle = `rgba(230, 210, 170, ${0.4 * (1 - t)})`
             ctx.beginPath()
-            ctx.moveTo(x + (w * i) / 4, y + h * (1 - progress))
-            ctx.lineTo(x + (w * i) / 4, y + h)
-            ctx.stroke()
+            ctx.arc(x + ((i * 71) % w), y + h - t * 26, 5 + t * 9, 0, Math.PI * 2)
+            ctx.fill()
         }
         ctx.restore()
     }
@@ -3311,8 +4292,9 @@ export function drawNotice(ctx: CanvasRenderingContext2D, w: number, text: strin
 export interface MapMarker {
     col: number
     row: number
-    kind: 'villager' | 'quest'
+    kind: 'villager' | 'quest' | 'resource' | 'chest'
     label?: string
+    color?: string
 }
 
 const MAP_COLORS: Record<string, string> = {
@@ -3435,6 +4417,19 @@ export function drawQuestMap(
     }
 
     // villagers: a dot and a name
+    // materials (with the copper mirror) and chests (with the hunting bow)
+    for (const m of markers) {
+        if (m.kind !== 'resource' && m.kind !== 'chest') continue
+        const mx = ox + m.col * ts + ts / 2
+        const my = oy + m.row * ts + ts / 2
+        const r = Math.max(2.5, ts * 0.45)
+        ctx.fillStyle = m.kind === 'chest' ? '#8a5a2b' : m.color ?? '#ffffff'
+        ctx.strokeStyle = m.kind === 'chest' ? '#e8c75a' : 'rgba(26, 17, 10, 0.8)'
+        ctx.lineWidth = 1
+        ctx.fillRect(mx - r, my - r, r * 2, r * 2)
+        ctx.strokeRect(mx - r, my - r, r * 2, r * 2)
+    }
+
     for (const m of markers) {
         if (m.kind !== 'villager') continue
         const mx = ox + m.col * ts + ts / 2
@@ -3862,3 +4857,31 @@ export function drawPathArrow(ctx: CanvasRenderingContext2D, x: number, y: numbe
     ctx.restore()
 }
 
+// The timer over a building that is going up: a small panel with the time left and a progress bar
+export function drawBuildTimer(ctx: CanvasRenderingContext2D, cx: number, cy: number, name: string, secondsLeft: number, progress: number) {
+    ctx.save()
+    const w = 170
+    const x = cx - w / 2
+    ctx.fillStyle = 'rgba(26, 17, 10, 0.9)'
+    ctx.beginPath()
+    ctx.roundRect(x, cy - 22, w, 40, 8)
+    ctx.fill()
+    ctx.strokeStyle = '#c9a227'
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `700 10px ${FONT_TITLE}`
+    ctx.fillStyle = '#e8c75a'
+    const m = Math.floor(secondsLeft / 60)
+    const sec = Math.ceil(secondsLeft % 60)
+    ctx.fillText('BUILDING ' + name.toUpperCase(), cx, cy - 11)
+    ctx.font = `700 12px ${FONT_TITLE}`
+    ctx.fillStyle = '#f3ead6'
+    ctx.fillText(m + ':' + String(sec === 60 ? 59 : sec).padStart(2, '0'), cx, cy + 3)
+    ctx.fillStyle = 'rgba(201, 162, 39, 0.25)'
+    ctx.fillRect(x + 10, cy + 11, w - 20, 3)
+    ctx.fillStyle = '#e8c75a'
+    ctx.fillRect(x + 10, cy + 11, (w - 20) * progress, 3)
+    ctx.restore()
+}

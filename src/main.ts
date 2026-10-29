@@ -12,13 +12,13 @@
 // (TILE, the size of one square in pixels, is defined there)
 import type { BuildLine, CodexEntry, CraftRow, DesignerRow, Facing, Hair, MapMarker, MenuItem, Outfit, Slot } from './art.ts'
 import {
-    CHEST_SIZE, CLOTH_COLORS, HAIRS, HOTBAR_SLOTS, OUTFITS, PACK_SIZE, PLAYER_SKINS, TILE,
+    CHEST_SIZE, CLOTH_COLORS, EXTRAS, HAIR_COLORS, HAIRS, LOOK_NAMES, TRIM_COLORS, HOTBAR_SLOTS, OUTFITS, PACK_SIZE, PLAYER_SKINS, TILE,
     buttonAt, clearButtons, drawAnimal,
     drawBuildScreen, drawBuilding, drawCapitalProgress,
     drawChest,
-    drawChestScreen, drawCodex, drawCraftScreen, drawDesigner, drawDialogue, drawEnding, drawFurnaceScreen, drawHeld, drawHotbar, drawHowToPlay,
+    drawChestScreen, drawCodex, drawCraftScreen, drawDesigner, drawDialogue, drawEnding, drawFurnaceScreen, drawHeld, drawHotbar, drawHowToPlay, drawKeyHint, HOWTO_TAB_COUNT,
     drawInventory, drawItem, drawMarker, drawNameTag, drawNotice,
-    drawPauseMenu,
+    drawPauseMenu, drawBuildTimer,
     drawPerson,
     drawPlotOutline,
     drawQuestMap, drawQuestPanel,
@@ -101,106 +101,109 @@ interface Npc {
     col: number
     row: number
     color: string
-    outfit: Outfit   // 'kilt' | 'robe' | 'dress'
-    hair: Hair       // 'short' | 'braids' | 'bald' | 'headwrap'
+    outfit: Outfit   // 'kilt' | 'robe' | 'dress' | 'tunic' | 'leopard'
+    hair: Hair       // 'short' | 'braids' | 'bald' | 'headwrap' | 'curly' | 'long' | 'cap'
+    hairColor?: string
+    accent?: string  // the color of the trim (gold if not given)
+    extra?: string   // 'necklace', 'earrings', 'armbands' or 'feather'
     lines: string[]  // what they say when they have no quest for you
 }
 
 // Making list of villagers
 const npcs: Npc[] = [
     {
-        name: "Amadi", ...at('amadi'), color: '#8e3b8e', outfit: 'kilt', hair: 'short',
+        name: "Amadi", ...at('amadi'), color: '#8e3b8e', outfit: 'tunic', hair: 'short',
         lines: [
             "Good day, traveler! I am a farmer, and I grow grain by the Nile.",
             "When the river floods, it leaves rich dark soil behind. That is why our barley and sorghum grow so well.",
         ],
     },
     {
-        name: "Mustafa", ...at('mustafa'), color: '#00ff84', outfit: 'kilt', hair: 'bald',
+        name: "Mustafa", ...at('mustafa'), color: '#00ff84', outfit: 'kilt', hair: 'bald', extra: 'armbands',
         lines: [
             "The fire in my forge never goes cold.",
             "Iron makes our tools and our spears strong. Meroë is famous for its ironworking!",
         ],
     },
     {
-        name: "Fatima", ...at('fatima'), color: '#9b2525', outfit: 'dress', hair: 'braids',
+        name: "Fatima", ...at('fatima'), color: '#9b2525', outfit: 'dress', hair: 'braids', extra: 'earrings',
         lines: [
             "I am a trader. I carry goods up and down the Nile.",
             "Kush sends gold, ivory and ebony to faraway lands, and brings back fine goods in return.",
         ],
     },
     {
-        name: "Mahmoud", ...at('mahmoud'), color: '#1c060a', outfit: 'robe', hair: 'short',
+        name: "Mahmoud", ...at('mahmoud'), color: '#1c060a', outfit: 'robe', hair: 'cap', extra: 'necklace',
         lines: [
             "Welcome to Meroë, traveler! For hundreds of years this city was the capital of the Kingdom of Kush.",
             "Look at the pyramids, where our kings and queens rest. They are much steeper than the pyramids of Egypt.",
         ],
     },
     {
-        name: "Kasha", ...at('kasha'), color: '#5f12ff', outfit: 'dress', hair: 'headwrap',
+        name: "Kasha", ...at('kasha'), color: '#5f12ff', outfit: 'dress', hair: 'headwrap', extra: 'necklace', accent: '#3aa6a0',
         lines: [
             "I am a scribe. I write in the Meroitic script, the alphabet of our people.",
             "Scholars today can read its sounds, but they still do not understand most of our language!",
         ],
     },
     {
-        name: "Tebe", ...at('tebe'), color: '#b5654a', outfit: 'dress', hair: 'braids',
+        name: "Tebe", ...at('tebe'), color: '#b5654a', outfit: 'dress', hair: 'curly', extra: 'earrings',
         lines: [
             "I make pottery in the old style of Kerma.",
             "Kerma potters were famous for thin bowls with a shiny black top and a red body.",
         ],
     },
     {
-        name: "Kheli", ...at('kheli'), color: '#3b6e3b', outfit: 'kilt', hair: 'short',
+        name: "Kheli", ...at('kheli'), color: '#3b6e3b', outfit: 'kilt', hair: 'short', extra: 'feather',
         lines: [
             "I am an archer. The Egyptians called our land Ta-Seti, the Land of the Bow.",
             "Kushite archers were so famous that kings of other lands wanted them in their armies.",
         ],
     },
     {
-        name: "Sarem", ...at('sarem'), color: '#8a2b2b', outfit: 'robe', hair: 'bald',
+        name: "Sarem", ...at('sarem'), color: '#8a2b2b', outfit: 'leopard', hair: 'bald', extra: 'necklace',
         lines: [
             "I serve Apedemak, the lion god, in this temple at Naqa.",
             "The walls show our kings and queens standing among the gods.",
         ],
     },
     {
-        name: "Hori", ...at('hori'), color: '#e8e0c8', outfit: 'robe', hair: 'bald',
+        name: "Hori", ...at('hori'), color: '#e8e0c8', outfit: 'leopard', hair: 'bald',
         lines: [
             "Welcome to Egypt, traveler. I serve in the temple of the god Amun.",
             "The people of Kush worship Amun too. They built a great temple to him at Jebel Barkal.",
         ],
     },
     {
-        name: "Nebet", ...at('nebet'), color: '#2f6fb5', outfit: 'dress', hair: 'headwrap',
+        name: "Nebet", ...at('nebet'), color: '#2f6fb5', outfit: 'dress', hair: 'long', extra: 'earrings',
         lines: [
             "Egypt has always wanted what Kush has: gold, ivory and ebony.",
             "The lands to the south are rich, and we trade for their goods.",
         ],
     },
     {
-        name: "Marcus", ...at('marcus'), color: '#a02020', outfit: 'robe', hair: 'short',
+        name: "Marcus", ...at('marcus'), color: '#a02020', outfit: 'tunic', hair: 'short', accent: '#c0c4c8',
         lines: [
             "I am a soldier of Rome, posted at the border at Syene.",
             "Rome rules Egypt now. Not long ago, a Kushite queen attacked this town. We have not forgotten.",
         ],
     },
     {
-        name: "Demetrios", ...at('demetrios'), color: '#b8860b', outfit: 'robe', hair: 'short',
+        name: "Demetrios", ...at('demetrios'), color: '#b8860b', outfit: 'robe', hair: 'curly', hairColor: '#9a948a',
         lines: [
             "I am a Greek merchant. My ships sail the Red Sea.",
             "Frankincense, ivory and gold: that is what my buyers want.",
         ],
     },
     {
-        name: "Berhane", ...at('berhane'), color: '#2e7d32', outfit: 'robe', hair: 'headwrap',
+        name: "Berhane", ...at('berhane'), color: '#2e7d32', outfit: 'robe', hair: 'curly', extra: 'necklace',
         lines: [
             "Welcome to Aksum! Our caravans cross the highlands to the sea.",
             "Our port, Adulis, trades with Egypt, Arabia and India.",
         ],
     },
     {
-        name: "Dawit", ...at('dawit'), color: '#8a8f98', outfit: 'kilt', hair: 'bald',
+        name: "Dawit", ...at('dawit'), color: '#8a8f98', outfit: 'tunic', hair: 'short', hairColor: '#9a948a', extra: 'armbands',
         lines: [
             "I carve the tall stone pillars of Aksum, called stelae.",
             "Some are cut from a single block of granite and are taller than most buildings.",
@@ -249,6 +252,44 @@ let panelUi: PanelUi | null = null
 // The building plots in the plaza, and which buildings are finished (building id -> when it was started)
 const plots = buildingDefs.map(def => ({ def, ...WORLD.areas[def.plot] }))
 const built = new Map<string, number>()
+const announced = new Set<string>()   // finished buildings whose fact has been shown
+
+// How long a building takes to go up: half a second for every tile of its plot (15 to 40 seconds)
+function buildMs(p: { col0: number; col1: number; row0: number; row1: number }): number {
+    return (p.col1 - p.col0 + 1) * (p.row1 - p.row0 + 1) * 500
+}
+
+// Is this building finished (not just started)?
+function isFinished(id: string): boolean {
+    const p = plots.find(q => q.def.id === id)
+    const startedAt = built.get(id)
+    return p !== undefined && startedAt !== undefined && performance.now() - startedAt >= buildMs(p)
+}
+
+// Has the player done every quest this building needs?
+function questsDoneFor(def: { requires?: string[] }): boolean {
+    return (def.requires ?? []).every(id => stateOf(id) === 'done')
+}
+
+function canBuild(def: { cost: { id: string; count: number }[]; requires?: string[] }): boolean {
+    return questsDoneFor(def) && def.cost.every(c => hasItem(c.id, c.count))
+}
+
+function finishedCount(): number {
+    return plots.filter(p => isFinished(p.def.id)).length
+}
+
+// A building that has just been finished: a gold burst, a fanfare and the fact about it
+function checkFinishedBuildings() {
+    for (const p of plots) {
+        if (announced.has(p.def.id) || !isFinished(p.def.id)) continue
+        if (talkingTo !== null) return   // wait until the dialogue box is free
+        announced.add(p.def.id)
+        for (let i = 0; i < 6; i++) burst(p.col0 + Math.floor(Math.random() * (p.col1 - p.col0 + 1)), p.row0 + Math.floor(Math.random() * (p.row1 - p.row0 + 1)), '#e8c75a')
+        sfx('quest')
+        startDialogue(speakerNamed('Finished: ' + p.def.name), [p.def.fact])
+    }
+}
 const craftedBefore = new Set<string>()   // recipes you have crafted at least once (the first time shows a fact)
 
 function isBuilt(col: number, row: number): boolean {
@@ -323,6 +364,8 @@ const appearance = {
     accent: '#d4a82a',
     outfit: 'kilt' as Outfit,
     hair: 'short' as Hair,
+    hairColor: HAIR_COLORS[0][1],
+    extra: 'none',
 }
 let playerName = 'Traveler'
 
@@ -615,12 +658,21 @@ function burst(col: number, row: number, color: string) {
 let playStartedAt = -99999
 
 // Pick an item up off the ground
+// Perks: a wearable gives its bonus while it is anywhere in your inventory
+function hasPerk(id: string): boolean {
+    return hasItem(id)
+}
+
 // Items you have picked up at least once (the first time shows the item's fact)
 const seenItems = new Set<string>()
 
 function pickUp(item: ItemDef) {
     burst(item.col, item.row, item.color)
     addItem(item.id)
+    let extra = 0
+    if (hasPerk('iron-hoe') && ['clay', 'wood', 'sandstone', 'sorghum'].includes(item.id)) extra++
+    if (hasPerk('bead-necklace') && Math.random() < 0.25) extra++
+    if (extra > 0) addItem(item.id, extra)
     worldItems.splice(worldItems.indexOf(item), 1)
     sfx('pickup')
     tutorialDid('pickup')
@@ -628,7 +680,7 @@ function pickUp(item: ItemDef) {
         seenItems.add(item.id)
         startDialogue(speakerNamed(`Found: ${item.name}`), [item.fact])
     } else {
-        notify('+1 ' + item.name)
+        notify('+' + (1 + extra) + ' ' + item.name + (extra > 0 ? ' (perk bonus!)' : ''))
     }
 }
 
@@ -636,7 +688,8 @@ function pickUp(item: ItemDef) {
 function rollChest(chest: ChestDef): string[] {
     const found = [...chest.loot]
     const pool = [...lootTable]
-    for (let i = 0; i < (chest.rolls ?? 1) && pool.length > 0; i++) {
+    const rolls = (chest.rolls ?? 1) + (hasPerk('leopard-cloak') ? 1 : 0)
+    for (let i = 0; i < rolls && pool.length > 0; i++) {
         // take a random item out of the pool, so the same extra can't show up twice
         found.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0])
     }
@@ -675,7 +728,7 @@ function pickUpDrop(d: Drop) {
 function viewOne(s: Stack | null): Slot | null {
     if (!s) return null
     const def = itemDefs.find(i => i.id === s.id)
-    return def ? { id: s.id, name: def.name, color: def.color, count: s.count, fact: def.fact } : null
+    return def ? { id: s.id, name: def.name, color: def.color, count: s.count, fact: def.perk ? def.fact + ' PERK (while you carry it): ' + def.perk : def.fact } : null
 }
 
 function viewOf(slots: Slots): (Slot | null)[] {
@@ -791,8 +844,9 @@ function finishTalking(npc: Npc) {
     } else if (found?.kind === 'thanks') {
         const q = found.q
         for (const id of q.needs ?? []) removeItem(id) // hand the items over
-        for (const r of q.reward ?? []) addItem(r.id, r.count) // and get the reward
-        if (q.reward) notify('Reward: ' + q.reward.map(r => r.count + ' ' + nameOf(r.id)).join(', '))
+        const bonus = hasPerk('gold-collar') ? 1 : 0   // (the gold collar gives 1 more of each reward)
+        for (const r of q.reward ?? []) addItem(r.id, r.count + bonus) // and get the reward
+        if (q.reward) notify('Reward: ' + q.reward.map(r => (r.count + bonus) + ' ' + nameOf(r.id)).join(', '))
         questState.set(q.id, 'done') // completed
         sfx('quest')
         // reuse the dialogue box to show the fact
@@ -851,7 +905,7 @@ function tickFurnace() {
         furnaceProgress = 0
         return
     }
-    furnaceProgress += dt / SMELT_MS
+    furnaceProgress += dt / (SMELT_MS * (hasPerk('faience-amulet') ? 0.5 : 1))
     if (furnaceProgress >= 1) {
         furnaceProgress = 0
         for (const i of [0, 1]) {
@@ -910,7 +964,7 @@ function unstick() {
 // Build the building of the plot window that is open
 function constructBuilding() {
     const plot = plots.find(p => p.def.id === panelUi?.id)
-    if (!plot || built.has(plot.def.id) || !plot.def.cost.every(c => hasItem(c.id, c.count))) return
+    if (!plot || built.has(plot.def.id) || !canBuild(plot.def)) return
     for (const c of plot.def.cost) removeItem(c.id, c.count)
     built.set(plot.def.id, performance.now())
     sfx('build')
@@ -921,7 +975,7 @@ function constructBuilding() {
     }
     for (let i = 0; i < 3; i++) burst(plot.col0 + Math.floor(Math.random() * (plot.col1 - plot.col0 + 1)), plot.row1, '#e8c75a')
     panelUi = null
-    startDialogue(speakerNamed('Built: ' + plot.def.name), [plot.def.fact])
+    notify('The builders are at work on ' + plot.def.name + '. It will take ' + Math.round(buildMs(plot) / 1000) + ' seconds.')
 }
 
 // What happens when you press E while playing
@@ -979,7 +1033,10 @@ function changeOption(dir: number) {
     if (designerRow === 1) appearance.skin = cycle(PLAYER_SKINS, appearance.skin, dir)
     else if (designerRow === 2) appearance.outfit = cycle(OUTFITS, appearance.outfit, dir)
     else if (designerRow === 3) appearance.hair = cycle(HAIRS, appearance.hair, dir)
-    else if (designerRow === 4) appearance.cloth = cycle(CLOTH_COLORS, appearance.cloth, dir)
+    else if (designerRow === 4) appearance.hairColor = cycle(HAIR_COLORS.map(c => c[1]), appearance.hairColor, dir)
+    else if (designerRow === 5) appearance.cloth = cycle(CLOTH_COLORS, appearance.cloth, dir)
+    else if (designerRow === 6) appearance.accent = cycle(TRIM_COLORS.map(c => c[1]), appearance.accent, dir)
+    else if (designerRow === 7) appearance.extra = cycle(EXTRAS, appearance.extra, dir)
 }
 
 function designerData(): DesignerRow[] {
@@ -987,9 +1044,12 @@ function designerData(): DesignerRow[] {
     return [
         { label: 'Name', text: playerName + cursor },
         { label: 'Skin', text: `Tone ${PLAYER_SKINS.indexOf(appearance.skin) + 1}`, swatch: appearance.skin },
-        { label: 'Outfit', text: cap(appearance.outfit) },
-        { label: 'Hair', text: cap(appearance.hair) },
-        { label: 'Colors', text: `Style ${CLOTH_COLORS.indexOf(appearance.cloth) + 1}`, swatch: appearance.cloth },
+        { label: 'Outfit', text: LOOK_NAMES[appearance.outfit] },
+        { label: 'Hair', text: LOOK_NAMES[appearance.hair] },
+        { label: 'Hair color', text: HAIR_COLORS.find(c => c[1] === appearance.hairColor)?.[0] ?? 'Black', swatch: appearance.hairColor },
+        { label: 'Clothes', text: `Color ${CLOTH_COLORS.indexOf(appearance.cloth) + 1}`, swatch: appearance.cloth },
+        { label: 'Trim', text: TRIM_COLORS.find(c => c[1] === appearance.accent)?.[0] ?? 'Gold', swatch: appearance.accent },
+        { label: 'Extra', text: LOOK_NAMES[appearance.extra] ?? 'None' },
     ]
 }
 
@@ -1031,6 +1091,9 @@ function questMarkers(): MapMarker[] {
             }
         }
     }
+    // perks: the copper mirror shows every material, the hunting bow shows unopened chests
+    if (hasPerk('copper-mirror')) for (const it of worldItems) marks.push({ col: it.col, row: it.row, kind: 'resource', color: it.color })
+    if (hasPerk('archer-bow')) for (const c of chests) if (!openedChests.has(c.id)) marks.push({ col: c.col, row: c.row, kind: 'chest' })
     return marks
 }
 
@@ -1049,12 +1112,9 @@ function codexEntries(): CodexEntry[] {
 // --- Keys ------------------------------------------------------------------
 
 // --- Character designer ---------------------------------------------------------------------
-const DESIGNER_ROWS = 5
+const DESIGNER_ROWS = 8
 let designerRow = 0
 
-function cap(s: string): string {
-    return s.charAt(0).toUpperCase() + s.slice(1)
-}
 
 // Go to the next (dir = 1) or previous (dir = -1) item in a list, wrapping around
 function cycle<T>(list: T[], current: T, dir: number): T {
@@ -1081,6 +1141,7 @@ function onButton(id: string, mouseButton: number, shift: boolean) {
         return
     }
     if (screen === 'howto') {
+        if (id.startsWith('howto-tab-')) howtoTab = Number(id.slice(10))
         if (id === 'howto-continue') screen = howtoBack
         return
     }
@@ -1154,6 +1215,8 @@ addEventListener('keydown', (e) => {
         return
     }
     if (screen === 'howto') {
+        if (key === 'arrowleft' || key === 'a') howtoTab = (howtoTab + HOWTO_TAB_COUNT - 1) % HOWTO_TAB_COUNT
+        else if (key === 'arrowright' || key === 'd') howtoTab = (howtoTab + 1) % HOWTO_TAB_COUNT
         if (key === 'enter') screen = howtoBack
         else if (key === 'escape') screen = 'title'
         return
@@ -1295,12 +1358,12 @@ function update() {
     if (tired && stamina > 0.3) tired = false
     const sprinting = wantsSprint && !tired
     if (sprinting) {
-        stamina = Math.max(0, stamina - 0.004 * frameScale)
+        stamina = Math.max(0, stamina - 0.004 * frameScale * (hasPerk('water-jar') ? 0.5 : 1))
         if (stamina === 0) tired = true
     } else {
-        stamina = Math.min(1, stamina + 0.003 * frameScale)
+        stamina = Math.min(1, stamina + 0.003 * frameScale * (hasPerk('feather-fan') ? 2 : 1))
     }
-    const speed = player.speed * (sprinting ? 1.6 : 1) * frameScale
+    const speed = player.speed * (sprinting ? 1.6 : 1) * (hasPerk('iron-spear') ? 1.15 : 1) * frameScale
 
     // Diagonal x & y
     if (keys.has('a') || keys.has('arrowleft')) dx -= 1
@@ -1367,6 +1430,13 @@ function draw() {
 
     let focusX = player.x + player.size / 2
     let focusY = player.y + player.size / 2
+    if (celebrationStartedAt >= 0 && !endingShown) {
+        const t = Math.min(1, (time - celebrationStartedAt) / 2500)
+        const ease = t * t * (3 - 2 * t)
+        const pan = Math.sin((time - celebrationStartedAt) / 3000) * 6 * TILE
+        focusX = focusX + (70 * TILE + pan - focusX) * ease
+        focusY = focusY + (106 * TILE - focusY) * ease
+    }
     if (screen === 'title') {
         const t = (1 - Math.cos(time / 14000)) / 2   // 0 -> 1 -> 0, slowly
         focusX = (35 + (84 - 35) * t) * TILE
@@ -1409,7 +1479,7 @@ function draw() {
         if (bx + bw < camX || bx > camX + w || by + bh < camY || by > camY + h) continue
         const startedAt = built.get(p.def.id)
         if (startedAt === undefined) drawPlotOutline(ctx, bx, by, bw, bh, p.def.name, time)
-        else drawBuilding(ctx, bx, by, bw, bh, p.def.id, time, Math.min(1, (time - startedAt) / 2500))
+        else drawBuilding(ctx, bx, by, bw, bh, p.def.id, time, Math.min(1, (time - startedAt) / buildMs(p)))
     }
     for (const s of stationTiles) drawStation(ctx, s.col * TILE, s.row * TILE, s.name, time)
 
@@ -1436,7 +1506,7 @@ function draw() {
             npc.col * TILE + 6,
             npc.row * TILE + 6,
             20,
-            { skin: skinFor(npc.name), cloth: npc.color, accent: '#d4a82a', outfit: npc.outfit, hair: npc.hair },
+            { skin: skinFor(npc.name), cloth: npc.color, accent: npc.accent ?? '#d4a82a', outfit: npc.outfit, hair: npc.hair, hairColor: npc.hairColor, extra: npc.extra },
             'down',
             false,
             time,
@@ -1482,8 +1552,19 @@ function draw() {
         }
     }
 
+    // During the celebration, a crowd cheers along the road below the plaza
+    if (celebrationStartedAt >= 0 && !endingShown) {
+        for (let i = 0; i < 16; i++) {
+            const npc = npcs[i % npcs.length]
+            const jump = Math.max(0, Math.sin(time / 180 + i * 1.7)) * 6
+            drawPerson(ctx, (54 + i * 2) * TILE + 6, 116 * TILE + 6 - jump, 20,
+                { skin: skinFor(npc.name), cloth: npc.color, accent: npc.accent ?? '#d4a82a', outfit: npc.outfit, hair: npc.hair, hairColor: npc.hairColor, extra: npc.extra },
+                'up', jump > 0, time + i * 300)
+        }
+    }
+
     // Draws the player (the look comes from the character designer)
-    drawPerson(ctx, player.x, player.y, player.size, appearance, player.facing, player.moving, time)
+    drawPerson(ctx, player.x, player.y, player.size, { ...appearance, crown: endingShown || celebrationStartedAt >= 0 }, player.facing, player.moving, time)
 
     // Name tags and quest markers go on top of all the people
     for (const npc of npcs) {
@@ -1493,6 +1574,29 @@ function draw() {
         if (marker) drawMarker(ctx, marker, cx, npc.row * TILE - 46, time)
     }
     drawNameTag(ctx, playerName, player.x + player.size / 2, player.y - 26)
+
+    // Timers over buildings that are going up
+    for (const p of plots) {
+        const startedAt = built.get(p.def.id)
+        if (startedAt === undefined || isFinished(p.def.id)) continue
+        const left = (buildMs(p) - (time - startedAt)) / 1000
+        drawBuildTimer(ctx, ((p.col0 + p.col1 + 1) / 2) * TILE, p.row0 * TILE - 30, p.def.name, left, (time - startedAt) / buildMs(p))
+    }
+
+    // Name tags over the workshops, and a "press E" hint over whatever you are standing next to
+    const nearStation = nearbyStation()
+    for (const st of stationTiles) {
+        const cx = st.col * TILE + TILE / 2
+        drawNameTag(ctx, stationNames[st.name] ?? st.name, cx, st.row * TILE - 24)
+        if (st.name === nearStation && screen === 'playing' && talkingTo === null) {
+            drawKeyHint(ctx, st.name === 'furnace' ? 'SMELT IRON' : 'CRAFT', cx, st.row * TILE - 50, time)
+        }
+    }
+    const nearPlot = !nearStation && screen === 'playing' && talkingTo === null ? nearbyPlot() : undefined
+    if (nearPlot) {
+        const ready = canBuild(nearPlot.def)
+        drawKeyHint(ctx, ready ? 'BUILD ' + nearPlot.def.name.toUpperCase() : 'SEE WHAT IT NEEDS', ((nearPlot.col0 + nearPlot.col1 + 1) / 2) * TILE, nearPlot.row0 * TILE - 14, time)
+    }
 
     ctx.restore()
 
@@ -1511,7 +1615,7 @@ function draw() {
         return
     }
     if (screen === 'howto') {
-        drawHowToPlay(ctx, w, h)
+        drawHowToPlay(ctx, w, h, howtoTab)
         return
     }
     if (screen === 'designer') {
@@ -1523,7 +1627,9 @@ function draw() {
             'Quests: ' + quests.filter(q => stateOf(q.id) === 'done').length + ' of ' + quests.length,
             'Codex: ' + discovered.size + ' of ' + civs.length,
             'Chests opened: ' + openedChests.size + ' of ' + chests.length,
-            'Buildings: ' + built.size + ' of ' + buildingDefs.length,
+            'Buildings: ' + finishedCount() + ' of ' + buildingDefs.length,
+            'Animals met: ' + seenAnimals.size + ' of ' + new Set(animalDefs.map(a => a.kind)).size,
+            'Time played: ' + Math.floor(playMs / 60000) + ' min ' + String(Math.floor(playMs / 1000) % 60).padStart(2, '0') + ' s',
         ], time)
         return
     }
@@ -1551,7 +1657,7 @@ function draw() {
     }
 
     // How much of the capital is built
-    drawCapitalProgress(ctx, w, built.size, buildingDefs.length)
+    drawCapitalProgress(ctx, w, finishedCount(), buildingDefs.length)
 
     // The stamina bar (only while it is not full)
     if (stamina < 1) drawStamina(ctx, w, h, stamina, tired)
@@ -1566,7 +1672,7 @@ function draw() {
             'Quests: ' + done + ' of ' + quests.length,
             'Codex: ' + discovered.size + ' of ' + civs.length,
             'Chests opened: ' + openedChests.size + ' of ' + chests.length,
-            'Buildings: ' + built.size + ' of ' + buildingDefs.length,
+            'Buildings: ' + finishedCount() + ' of ' + buildingDefs.length,
             'Animals: ' + seenAnimals.size + ' of ' + new Set(animalDefs.map(a => a.kind)).size,
         ]
         drawInventory(ctx, w, h, windowLayout(w, h, false), viewOf(inventory), appearance, playerName, stats, time)
@@ -1606,7 +1712,12 @@ function draw() {
         const plot = plots.find(p => p.def.id === panelUi!.id)
         if (plot) {
             const lines: BuildLine[] = plot.def.cost.map(c => ({ name: nameOf(c.id), have: countIn(inventory, c.id), need: c.count }))
-            drawBuildScreen(ctx, w, h, plot.def.name, plot.def.blurb, lines, plot.def.cost.every(c => hasItem(c.id, c.count)))
+            for (const qid of plot.def.requires ?? []) {
+                const q = quests.find(x => x.id === qid)
+                const done = stateOf(qid) === 'done'
+                lines.push({ name: 'Quest: ' + (q?.title ?? qid), have: done ? 1 : 0, need: 1, text: done ? 'DONE' : 'NOT YET' })
+            }
+            drawBuildScreen(ctx, w, h, plot.def.name, plot.def.blurb, lines, canBuild(plot.def))
         }
     }
 
@@ -1738,6 +1849,14 @@ function scatterWorld() {
 }
 
 let endingShown = false   // the ending screen is only shown once
+
+// The celebration when the capital is finished (then the ending screen)
+let celebrationStartedAt = -1
+let nextFireworkAt = 0
+const FIREWORK_COLORS = ['#e8c75a', '#ff9a3c', '#3aa6c4', '#f3ead6', '#b0412e']
+
+// How long you have played (only counts while you are playing)
+let playMs = 0
 
 let lastFrameAt = performance.now()
 let frameScale = 1   // 1 at 60 frames a second, 2 at 30, and so on
@@ -1881,6 +2000,7 @@ interface SaveData {
     seen?: string[]   // items picked up before (older saves do not have this)
     tutorial?: number
     waypoint?: { col: number; row: number } | null
+    playMs?: number
 }
 
 let gameStarted = false   // true once you are playing (a new game or a loaded one)
@@ -1922,6 +2042,7 @@ function saveGame() {
         seen: [...seenItems],
         tutorial: tutorialStep,
         waypoint,
+        playMs,
     }
     try {
         localStorage.setItem(SAVE_KEY, JSON.stringify(data))
@@ -1964,7 +2085,9 @@ function loadGame(d: SaveData) {
     discovered.clear()
     d.codex.forEach(id => discovered.add(id))
     built.clear()
-    d.built.forEach(id => built.set(id, -99999))   // long ago, so they are drawn finished
+    d.built.forEach(id => built.set(id, -999999))   // long ago, so they are finished
+    announced.clear()
+    d.built.forEach(id => announced.add(id))
     craftedBefore.clear()
     d.crafted.forEach(id => craftedBefore.add(id))
     seenAnimals.clear()
@@ -1973,6 +2096,7 @@ function loadGame(d: SaveData) {
     seenItems.clear()
     ;(d.seen ?? []).forEach(id => seenItems.add(id))
     waypoint = d.waypoint ?? null
+    playMs = d.playMs ?? 0
     tutorialStep = d.tutorial ?? TUTORIAL.length   // (an old save has already been played: skip the tutorial)
 }
 
@@ -1988,13 +2112,14 @@ let confirmNew = false     // New Game was clicked once and now asks "are you su
 let pauseOpen = false
 let pauseIndex = 0
 let howtoBack: 'title' | 'designer' = 'designer'   // where How to Play goes when you continue
+let howtoTab = 0   // which tab of How to Play is showing
 
 function menuItems(): MenuItem[] {
     const items: MenuItem[] = []
     const save = savedGame
     if (gameStarted || save) {
         const name = gameStarted ? playerName : save!.name
-        const b = gameStarted ? built.size : save!.built.length
+        const b = gameStarted ? finishedCount() : save!.built.length
         items.push({ id: 'menu-continue', label: 'CONTINUE', detail: name + ': ' + b + ' of ' + buildingDefs.length + ' buildings built' })
     }
     items.push({
@@ -2102,11 +2227,34 @@ function loop() {
         if (talkingTo === null && !pauseOpen) tickAnimals()
         checkDiscoveries()
         // the whole capital is built (and the last building's fact has been read): the ending
-        const finishedAt = Math.max(0, ...built.values())
-        if (!endingShown && talkingTo === null && built.size === buildingDefs.length && performance.now() - finishedAt > 3000) {
-            endingShown = true
+        if (!pauseOpen) {
+            checkFinishedBuildings()
+            playMs += Math.min(100, frameScale * (1000 / 60))
+        }
+        // every building finished, and the last one's fact has been read: the queen comes to thank you
+        if (!endingShown && celebrationStartedAt < 0 && talkingTo === null && announced.size === buildingDefs.length) {
+            celebrationStartedAt = now
             closeWindows()
-            screen = 'ending'
+            sfx('quest')
+            startDialogue(speakerNamed('Kandake Amanitore'), [
+                'Builder! Look at our city. The temple of Amun shines, the pyramids rise over the plain, and the forges glow day and night.',
+                'Because of you, Meroë is once again the jewel of Kush. Wear this crown, so that all the kingdom knows what you have done!',
+            ])
+        }
+        if (celebrationStartedAt >= 0 && !endingShown) {
+            // fireworks of gold over the capital
+            if (now > nextFireworkAt) {
+                nextFireworkAt = now + 250 + Math.random() * 300
+                const p = plots[Math.floor(Math.random() * plots.length)]
+                burst(p.col0 + Math.random() * (p.col1 - p.col0), p.row0 + Math.random() * (p.row1 - p.row0), FIREWORK_COLORS[Math.floor(Math.random() * FIREWORK_COLORS.length)])
+                if (Math.random() < 0.3) sfx('codex')
+            }
+            // after the queen has spoken and the fireworks have gone on a while: the ending screen
+            if (talkingTo === null && now - celebrationStartedAt > 9000) {
+                endingShown = true
+                closeWindows()
+                screen = 'ending'
+            }
         }
     }
     draw()

@@ -108,6 +108,21 @@ export const recipes: Recipe[] = [
         inputs: [{ id: 'clay', count: 1 }, { id: 'wood', count: 1 }], output: { id: 'black-pot', count: 1 },
         fact: 'Kerma potters fired their pots upside down in the ashes, which turned the rim shiny black and left the body red.',
     },
+    {
+        id: 'water-jar', station: 'kiln', name: 'Water Jar',
+        inputs: [{ id: 'clay', count: 2 }], output: { id: 'water-jar', count: 1 },
+        fact: 'A water jar keeps you going on long trips across the desert. While you carry it, running uses half the stamina.',
+    },
+    {
+        id: 'faience-amulet', station: 'kiln', name: 'Faience Amulet',
+        inputs: [{ id: 'faience-beads', count: 1 }, { id: 'clay', count: 1 }], output: { id: 'faience-amulet', count: 1 },
+        fact: 'Faience is made from crushed quartz and fired until it shines. While you carry the amulet, the furnace works twice as fast.',
+    },
+    {
+        id: 'archer-bow', station: 'brickyard', name: 'Hunting Bow',
+        inputs: [{ id: 'wood', count: 2 }, { id: 'ostrich-feathers', count: 1 }], output: { id: 'archer-bow', count: 1 },
+        fact: 'A Nubian bow was made of wood and horn. While you carry one, unopened chests show on your map.',
+    },
 ]
 
 // The furnace: ore + fuel makes a bar, and it takes a few seconds

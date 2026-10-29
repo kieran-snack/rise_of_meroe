@@ -15,13 +15,14 @@ export interface ItemDef {
     color: string
     fact: string // shown when you pick it up
     civ?: string // which outside civilization it comes from (see civs.ts)
-    spawn?: { area: string; count: number; nearWater?: boolean; gap?: number } // lies on the ground at random spots in this part of the world (see worldgen.ts)
+    spawn?: { area: string; count: number; nearWater?: boolean; gap?: number }
+    perk?: string // a bonus you get while you carry this item // lies on the ground at random spots in this part of the world (see worldgen.ts)
 }
 // Items with col: -1 and row: -1 are not on the ground. They are found in chests (see chests.ts).
 
 export const itemDefs: ItemDef[] = [
     {
-        id: 'iron-ore', name: 'Iron Ore', col: -1, row: -1, spawn: { area: 'slag', count: 6, gap: 2 }, color: '#5b5f66',
+        id: 'iron-ore', name: 'Iron Ore', col: -1, row: -1, spawn: { area: 'slag', count: 9, gap: 1.5 }, color: '#5b5f66',
         fact: 'Iron ore! Kushite smiths heated ore like this in furnaces fueled by charcoal. Meroë was so busy with ironworking that mounds of leftover slag are still there today.',
     },
     {
@@ -61,7 +62,7 @@ export const itemDefs: ItemDef[] = [
         fact: 'Ivory! Elephant tusks were among the most valuable goods traded out of Africa. Craftsmen carved them into jewelry, boxes and furniture.',
     },
     {
-        id: 'ebony', name: 'Ebony Log', col: -1, row: -1, spawn: { area: 'kerma', count: 3 }, color: '#2b2018',
+        id: 'ebony', name: 'Ebony Log', col: -1, row: -1, spawn: { area: 'kerma', count: 5 }, color: '#2b2018',
         fact: 'Ebony is a very dark, very hard wood from Africa. Egyptians prized it for fine furniture and carvings.',
     },
     {
@@ -69,11 +70,11 @@ export const itemDefs: ItemDef[] = [
         fact: 'An iron bar, ready for the smith. Iron tools and weapons were stronger than bronze, which made ironworking a source of power.',
     },
     {
-        id: 'incense', name: 'Frankincense', col: -1, row: -1, spawn: { area: 'aksum', count: 3 }, color: '#d8c27a',
+        id: 'incense', name: 'Frankincense', col: -1, row: -1, spawn: { area: 'aksum', count: 4 }, color: '#d8c27a',
         fact: 'Frankincense is a sweet-smelling tree resin burned in temples. It was one of the most valuable trade goods of the ancient world.',
     },
     {
-        id: 'granite', name: 'Granite Block', col: -1, row: -1, spawn: { area: 'granite-quarry', count: 4 }, color: '#a39e96',
+        id: 'granite', name: 'Granite Block', col: -1, row: -1, spawn: { area: 'granite-quarry', count: 5 }, color: '#a39e96',
         fact: 'Granite is an extremely hard stone. Builders in Aksum cut and raised huge granite pillars without modern machines.',
     },
     {
@@ -81,7 +82,7 @@ export const itemDefs: ItemDef[] = [
         fact: 'Wood and charcoal fueled the furnaces of Meroë. Smelting iron used so much fuel that the forests around the city were cut down.',
     },
     {
-        id: 'clay', name: 'Nile Clay', col: -1, row: -1, color: '#9a6b4a', spawn: { area: 'kerma', count: 10 },
+        id: 'clay', name: 'Nile Clay', col: -1, row: -1, color: '#9a6b4a', spawn: { area: 'kerma', count: 12 },
         fact: 'Clay from the banks of the Nile was shaped into bricks and pots, and dried in the sun or baked in a kiln.',
     },
     {
@@ -117,23 +118,23 @@ export const itemDefs: ItemDef[] = [
         fact: 'A small lion charm for Apedemak, the lion god of Kush, who protected the king in war.',
     },
     {
-        id: 'gold-collar', name: 'Gold Collar', col: -1, row: -1, color: '#f0c840',
+        id: 'gold-collar', name: 'Gold Collar', col: -1, row: -1, color: '#f0c840', perk: "Royal favor: you get 1 extra of every quest reward.",
         fact: 'A wide collar of gold and blue faience, the kind worn by the kings and queens of Kush.',
     },
     {
-        id: 'bead-necklace', name: 'Bead Necklace', col: -1, row: -1, color: '#5ab8a8',
+        id: 'bead-necklace', name: 'Bead Necklace', col: -1, row: -1, color: '#5ab8a8', perk: "Lucky charm: 1 in 4 chance to find 2 of whatever you pick up.",
         fact: 'A necklace of glass beads and cowrie shells. Jewelry like this was worn all over Kush.',
     },
     {
-        id: 'copper-mirror', name: 'Copper Mirror', col: -1, row: -1, color: '#d08a50',
+        id: 'copper-mirror', name: 'Copper Mirror', col: -1, row: -1, color: '#d08a50', perk: "Sun signal: every material lying around shows on the map.",
         fact: 'A polished copper mirror. People in Kush used mirrors like this long before glass mirrors.',
     },
     {
-        id: 'iron-spear', name: 'Iron Spear', col: -1, row: -1, color: '#7a7f88',
+        id: 'iron-spear', name: 'Iron Spear', col: -1, row: -1, color: '#7a7f88', perk: "Hunter's stride: you walk 15% faster.",
         fact: 'An iron spear. Iron weapons helped Kush defend itself, even against Rome.',
     },
     {
-        id: 'iron-hoe', name: 'Iron Hoe', col: -1, row: -1, color: '#6b6f75',
+        id: 'iron-hoe', name: 'Iron Hoe', col: -1, row: -1, color: '#6b6f75', perk: "Good tools: 1 extra when you gather clay, wood, sandstone or sorghum.",
         fact: 'An iron hoe for digging fields. Iron tools helped farmers grow more food.',
     },
     {
@@ -145,11 +146,11 @@ export const itemDefs: ItemDef[] = [
         fact: 'A stone offering table, carved with a prayer in Meroitic writing.',
     },
     {
-        id: 'feather-fan', name: 'Ostrich Feather Fan', col: -1, row: -1, color: '#f5efe2',
+        id: 'feather-fan', name: 'Ostrich Feather Fan', col: -1, row: -1, color: '#f5efe2', perk: "Cool breeze: your stamina comes back twice as fast.",
         fact: 'A royal fan of ostrich feathers on a wooden handle.',
     },
     {
-        id: 'leopard-cloak', name: 'Leopard-Skin Cloak', col: -1, row: -1, color: '#d8a24a',
+        id: 'leopard-cloak', name: 'Leopard-Skin Cloak', col: -1, row: -1, color: '#d8a24a', perk: "Priest's blessing: chests hold one more treasure.",
         fact: 'A cloak of leopard skin, worn by priests in ceremonies.',
     },
     {
@@ -163,6 +164,18 @@ export const itemDefs: ItemDef[] = [
     {
         id: 'black-pot', name: 'Black-Topped Pot', col: -1, row: -1, color: '#8a2e1c',
         fact: 'A red pot with a shiny black rim, made the old way of the Kerma potters.',
+    },
+    {
+        id: 'water-jar', name: 'Water Jar', col: -1, row: -1, color: '#c08a5a', perk: 'Cool water: running uses half as much stamina.',
+        fact: 'Clay jars keep water cool, because a little water soaks through and dries on the outside. People in Sudan still use them.',
+    },
+    {
+        id: 'faience-amulet', name: 'Faience Amulet', col: -1, row: -1, color: '#3aa6c4', perk: 'Blessing of Amun: the furnace smelts twice as fast.',
+        fact: 'Amulets of shiny blue faience were worn for protection. Many showed gods like Amun, Isis or Bes.',
+    },
+    {
+        id: 'archer-bow', name: 'Hunting Bow', col: -1, row: -1, color: '#8a5a2b', perk: "Archer's eyes: unopened chests show on the map.",
+        fact: 'Nubia was called Ta-Seti, the Land of the Bow. Its archers could shoot farther than almost anyone in the ancient world.',
     },
     {
         id: 'cowrie', name: 'Cowrie Shell', col: -1, row: -1, color: '#f1e3cf',
